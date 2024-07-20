@@ -1,0 +1,4 @@
+[submodule "lua"]
+	path = luajni/src/main/cpp/3rd/lua
+	url = https://github.com/lua/lua.git
+	branch = v5.4
