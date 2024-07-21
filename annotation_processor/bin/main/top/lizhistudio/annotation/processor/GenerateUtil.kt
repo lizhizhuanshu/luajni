@@ -98,8 +98,8 @@ object GenerateUtil {
           |if(result == NULL){
           |  lua_pushnil(L);
           |}else{
-          |  JavaArray* javaArray = luaL_newuserdata(L,sizeof(JavaArray));
-          |  javaArray->id = luaJniCacheJavaObject(env,result);
+          |  JavaArray* javaArray = lua_newuserdata(L,sizeof(JavaArray));
+          |  javaArray->id = luaJniCacheObject(env,result);
           |  (*env)->DeleteLocalRef(env,result);
           |  javaArray->elementType = ${generateArrayElementTypeCode(method.returnType.name)};
           |  luaL_setmetatable(L,"JavaArray");
@@ -165,8 +165,8 @@ object GenerateUtil {
           |if(result == NULL){
           |  lua_pushnil(L);
           |}else{
-          |  JavaObject* javaObject = luaL_newuserdata(L,sizeof(JavaObject));
-          |  javaObject->id = luaJniCacheJavaObject(env,result);
+          |  JavaObject* javaObject = lua_newuserdata(L,sizeof(JavaObject));
+          |  javaObject->id = luaJniCacheObject(env,result);
           |  (*env)->DeleteLocalRef(env,result);
           |  luaL_setmetatable(L,"${method.returnType.name}");
           |}

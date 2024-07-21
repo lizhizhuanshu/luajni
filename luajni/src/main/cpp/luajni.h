@@ -49,8 +49,8 @@ int luaJniInjectAll(lua_State*L, JNIEnv *env);
 int luaJniRegisteredCount();
 
 
-int64_t luaJniCacheJavaObject(JNIEnv*env, jobject obj);
-void luaJniReleaseJavaObject(JNIEnv*env, int64_t id);
+int64_t luaJniCacheObject(JNIEnv*env, jobject obj);
+void luaJniReleaseObject(JNIEnv*env, int64_t id);
 #define luaJniTakeObject(env,id) ((jobject)id)
 #define luaJniPutBackObject(env,obj)
 

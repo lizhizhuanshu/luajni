@@ -9,7 +9,7 @@ class LuaInterpreter {
   }
 
   fun register(vararg classes:Class<*>) = register(*classes.map { it.name }.toTypedArray())
-  private fun register(vararg names:String):Int{
+  fun register(vararg names:String):Int{
     var count = 0
     names.forEach {
       if(register(nativePtr, it)){

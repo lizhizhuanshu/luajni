@@ -233,8 +233,8 @@ class ClassCodeGenerator(private val clazz:ClassMetaData):Generator,
       |${eachConstructorMethod(context).mIndent(2)}
       |  if(obj != NULL){
       |    JavaObject* jniObject = (JavaObject*)lua_newuserdata(L,sizeof(JavaObject));
-      |    jniObject->id = luaJniCacheJavaObject(env,obj);
-      |    env->DeleteLocalRef(obj);
+      |    jniObject->id = luaJniCacheObject(env,obj);
+      |    (*env)->DeleteLocalRef(env,obj);
       |    luaL_setmetatable(L,"${className()}");
       |  }else{
       |    lua_pushnil(L);
@@ -319,7 +319,7 @@ class ClassCodeGenerator(private val clazz:ClassMetaData):Generator,
       |  classInfo->name = "${className()}";
       |  jclass clazz = (*env)->FindClass(env,"${className().replace(".","/")}");
       |${initClassInfoCode().mIndent(2)}
-      |  classInfo->id = luaJniCacheJavaObject(env,clazz);
+      |  classInfo->id = luaJniCacheObject(env,clazz);
       |  (*env)->DeleteLocalRef(env,clazz);
       |  luaJniRegister("${className()}",${injectToLuaMethodName()},classInfo);
       |  return 1;
@@ -332,7 +332,7 @@ class ClassCodeGenerator(private val clazz:ClassMetaData):Generator,
       |int unregister_${injectToLuaMethodName()}(JNIEnv*env){
       |  ClassInfo* classInfo =luaJniUnregister("${className()}");
       |  if(classInfo != NULL){
-      |    luaJniReleaseJavaObject(env,classInfo->id);
+      |    luaJniReleaseObject(env,classInfo->id);
       |    free(classInfo);
       |  }
       |  return 1;
@@ -350,7 +350,7 @@ class ClassCodeGenerator(private val clazz:ClassMetaData):Generator,
       |${java2luaException(context).mIndent(2)}
       |if(obj != NULL){
       |  JavaObject* jniObject = (JavaObject*)lua_newuserdata(L,sizeof(JavaObject));
-      |  jniObject->id = luaJniCacheJavaObject(env,obj);
+      |  jniObject->id = luaJniCacheObject(env,obj);
       |  (*env)->DeleteLocalRef(env,obj);
       |  luaL_setmetatable(L,"${className()}");
       |  lua_setglobal(L,"${clazz.shortName()}");
@@ -482,7 +482,7 @@ class ClassCodeGenerator(private val clazz:ClassMetaData):Generator,
             |jstring $paramName = NULL;
             |if(lua_isstring(L,$index)){
             |  const char* luaParam_$paramName = lua_tostring(L,$index);
-            |  $paramName = env->NewStringUTF(luaParam_$paramName);
+            |  $paramName = (*env)->NewStringUTF(env,luaParam_$paramName);
             |  if(luaJniCatchJavaException(L,env)){
             |${generateReleaseContextCode(context).mIndent(4)}
             |    lua_error(L);

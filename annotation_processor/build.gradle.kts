@@ -12,6 +12,7 @@ java {
 dependencies {
   implementation(libs.kotlinpoet)
   implementation(libs.auto.service)
+  implementation(libs.androidx.tools.apigenerator)
   kapt (libs.auto.service)
   implementation(project(":annotation"))
 }

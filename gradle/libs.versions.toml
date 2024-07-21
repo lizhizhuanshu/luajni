@@ -13,6 +13,7 @@ jetbrainsKotlinJvm = "1.9.0"
 kotlinpoet = "1.12.0"
 appcompat = "1.7.0"
 material = "1.12.0"
+toolsApigenerator = "1.0.0-alpha09"
 
 
 [libraries]
@@ -34,6 +35,7 @@ kotlinpoet = { module = "com.squareup:kotlinpoet", version.ref = "kotlinpoet" }
 auto-service = { module = "com.google.auto.service:auto-service", version.ref = "autoService" }
 androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
 material = { group = "com.google.android.material", name = "material", version.ref = "material" }
+androidx-tools-apigenerator = { group = "androidx.privacysandbox.tools", name = "tools-apigenerator", version.ref = "toolsApigenerator" }
 
 
 [plugins]

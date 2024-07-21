@@ -56,12 +56,12 @@ int luaJniEqualJavaArray(JavaArray* a, const char*className, int level, enum ARR
 }
 
 
-int64_t luaJniCacheJavaObject(JNIEnv*env, jobject obj){
+int64_t luaJniCacheObject(JNIEnv*env, jobject obj){
     jobject globalRef = (*env)->NewGlobalRef(env,obj);
     return (int64_t)globalRef;
 }
 
-void luaJniReleaseJavaObject(JNIEnv*env, int64_t id){
+void luaJniReleaseObject(JNIEnv*env, int64_t id){
     jobject obj = (jobject)id;
     (*env)->DeleteGlobalRef(env,obj);
 }
@@ -134,7 +134,7 @@ static int javaArrayIndex(lua_State*L){
         }
         if(nArray){
             JavaArray *newArray = (JavaArray *) lua_newuserdata(L,sizeof(JavaArray));
-            newArray->id = luaJniCacheJavaObject(env, nArray);
+            newArray->id = luaJniCacheObject(env, nArray);
             newArray->level = array->level -1;
             newArray->name = array->name;
             luaL_getmetatable(L,JAVA_ARRAY_META_NAME);
@@ -207,7 +207,7 @@ static int javaArrayIndex(lua_State*L){
             case ELEMENT_OBJECT: {
                 jobject value = (*env)->GetObjectArrayElement(env, obj, index - 1);
                 if (value != NULL) {
-                    int64_t id = luaJniCacheJavaObject(env, value);
+                    int64_t id = luaJniCacheObject(env, value);
                     JavaObject *object = (JavaObject *) lua_newuserdata(L, sizeof(JavaObject));
                     object->id = id;
                     (*env)->DeleteLocalRef(env,value);
@@ -215,7 +215,7 @@ static int javaArrayIndex(lua_State*L){
                     if (r) {
                         lua_setmetatable(L, -2);
                     } else {
-                        luaJniReleaseJavaObject(env, id);
+                        luaJniReleaseObject(env, id);
                         luaJniPutBackObject(env,obj);
                         luaL_error(L, "can not find metatable for %s", array->name);
                     }
@@ -512,7 +512,7 @@ int luaJniPushObjectField(lua_State*L,JNIEnv*env,jobject obj,jfieldID field,cons
     jobject value = (*env)->GetObjectField(env,obj,field);
     if(luaJniCatchJavaException(L, env)) return 0;
     if(value != NULL){
-        int64_t id = luaJniCacheJavaObject(env, value);
+        int64_t id = luaJniCacheObject(env, value);
         (*env)->DeleteLocalRef(env,value);
         JavaObject *object = (JavaObject *) lua_newuserdata(L,sizeof(JavaObject));
         object->id = id;

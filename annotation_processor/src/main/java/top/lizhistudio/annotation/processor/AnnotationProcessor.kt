@@ -1,31 +1,71 @@
 package top.lizhistudio.annotation.processor
 
+import androidx.privacysandbox.tools.kotlinx.metadata.internal.metadata.deserialization.Flags
+import androidx.privacysandbox.tools.kotlinx.metadata.jvm.KotlinClassMetadata
 import com.google.auto.service.AutoService
 import top.lizhistudio.annotation.LuaClass
-import top.lizhistudio.annotation.processor.ClassCodeGenerator
-import top.lizhistudio.annotation.processor.ClassElementMetaData
+import top.lizhistudio.annotation.LuaEnum
+import top.lizhistudio.annotation.LuaFunction
+import top.lizhistudio.annotation.processor.ClassElementMetaData.Companion.toCommonMethod
+import top.lizhistudio.annotation.processor.GenerateUtil.isCompanionObject
+import top.lizhistudio.annotation.processor.GenerateUtil.isKotlinObject
+import top.lizhistudio.annotation.processor.GenerateUtil.isStaticFunction
 import top.lizhistudio.annotation.processor.GenerateUtil.mIndent
-import top.lizhistudio.annotation.processor.Generator
 import javax.annotation.processing.AbstractProcessor
 import javax.annotation.processing.Processor
 import javax.annotation.processing.RoundEnvironment
 import javax.annotation.processing.SupportedAnnotationTypes
 import javax.annotation.processing.SupportedSourceVersion
 import javax.lang.model.SourceVersion
+import javax.lang.model.element.Element
+import javax.lang.model.element.ElementKind
+import javax.lang.model.element.ExecutableElement
+import javax.lang.model.element.Modifier
 import javax.lang.model.element.TypeElement
 import javax.tools.StandardLocation
+import kotlin.coroutines.CoroutineContext
+
 
 @AutoService(Processor::class)
 @SupportedSourceVersion(SourceVersion.RELEASE_17)
-@SupportedAnnotationTypes("top.lizhistudio.annotation.LuaClass")
+@SupportedAnnotationTypes("top.lizhistudio.annotation.LuaClass",
+  "top.lizhistudio.annotation.LuaEnum",
+  "top.lizhistudio.annotation.LuaFunction")
 class AnnotationProcessor: AbstractProcessor() {
   private val generators = mutableListOf<Generator>()
+  private fun insertFunction(element:ExecutableElement){
+    println("insertFunction ${element.simpleName}  enclosing ${element.enclosingElement.simpleName}")
+    val enclosing = element.enclosingElement as TypeElement
+    val name = enclosing.qualifiedName.toString()
+    val old = generators.firstOrNull {it.className() == name}
+    val method = toCommonMethod(element)
+    if(old != null){
+      (old as FunctionContainer).putFunction(method)
+    }else{
+      val generator = FunctionsCodeGenerator(enclosing)
+      generator.putFunction(method)
+      generators.add(generator)
+    }
+  }
   override fun process(p0: MutableSet<out TypeElement>?, p1: RoundEnvironment?): Boolean {
 
     p1?.getElementsAnnotatedWith(LuaClass::class.java)?.forEach {
       val generator = ClassCodeGenerator(ClassElementMetaData(it as TypeElement))
       generators.add(generator)
     }
+    p1?.getElementsAnnotatedWith(LuaEnum::class.java)?.forEach {
+      val generator = EnumCodeGenerator(it as TypeElement)
+      generators.add(generator)
+    }
+
+    p1?.getElementsAnnotatedWith(LuaFunction::class.java)?.filter {
+      it.kind == ElementKind.METHOD &&
+              it is ExecutableElement &&
+              ( isStaticFunction(it) || isKotlinObject(it.enclosingElement as TypeElement))
+    }?.forEach {
+      insertFunction(it as ExecutableElement)
+    }
+
     if(p1?.processingOver() == true){
       writeCFile()
       writeCMakeLists()
@@ -162,5 +202,8 @@ class AnnotationProcessor: AbstractProcessor() {
 
   companion object{
     const val TAG = "AnnotationProcessor"
+
+
+
   }
 }

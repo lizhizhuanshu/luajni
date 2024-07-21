@@ -4,6 +4,8 @@ package top.lizhistudio.annotation.processor
 import top.lizhistudio.annotation.processor.ClassMetaData
 import top.lizhistudio.annotation.LuaClass
 import top.lizhistudio.annotation.LuaField
+import top.lizhistudio.annotation.processor.GenerateUtil.getJvmName
+import top.lizhistudio.annotation.processor.GenerateUtil.isStaticFunction
 import top.lizhistudio.annotation.processor.data.CommonField
 import top.lizhistudio.annotation.processor.data.CommonMethod
 import top.lizhistudio.annotation.processor.data.CommonParameter
@@ -35,10 +37,7 @@ class ClassElementMetaData(private val clazz:TypeElement): ClassMetaData {
         else -> {}
       }
     }
-    var checkName = mutableMapOf<String,Int>()
-    fields.forEach {
 
-    }
   }
   override fun autoRegister(): Boolean {
     return clazz.getAnnotation(LuaClass::class.java).autoRegister
@@ -57,7 +56,7 @@ class ClassElementMetaData(private val clazz:TypeElement): ClassMetaData {
   }
 
   override fun className(): String {
-    return clazz.qualifiedName.toString()
+    return getJvmName(clazz)
   }
 
   override fun fileName(): String {
@@ -87,10 +86,10 @@ class ClassElementMetaData(private val clazz:TypeElement): ClassMetaData {
     }
     fun toCommonMethod(element:ExecutableElement):CommonMethod{
       val annotation = element.getAnnotation(LuaField::class.java)
-      val name = if(annotation.alias.isEmpty()) element.simpleName.toString() else annotation.alias
+      val name = if(annotation == null || annotation.alias.isEmpty()) element.simpleName.toString() else annotation.alias
       val returnType = element.returnType
       val parameters = element.parameters.map { toCommonParameter(it) }
-      return CommonMethod(name, toCommonType(returnType),parameters,annotation.method2field)
+      return CommonMethod(name, toCommonType(returnType),parameters,annotation?.method2field?:false,isStaticFunction(element))
     }
     fun toCommonParameter(element:VariableElement): CommonParameter {
       val name = element.simpleName.toString()

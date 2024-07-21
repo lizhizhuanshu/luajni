@@ -8,6 +8,7 @@ import org.junit.runner.RunWith
 import org.junit.Assert.*
 
 import top.lizhistudio.luajni.core.LuaInterpreter
+import top.lizhistudio.luajni.test.InsideClass
 import top.lizhistudio.luajni.test.SimpleTest
 
 
@@ -46,6 +47,70 @@ class LuaJniTest {
     lua.destroy()
   }
 
+  @Test
+  fun testKotlinSimpleEnum(){
+    val lua = LuaInterpreter()
+    lua.register(top.lizhistudio.luajni.test.SimpleEnum::class.java)
+    val r1 = lua.execute("return SimpleEnum.A")
+    assertEquals(1L, r1)
+    val r2 = lua.execute("return SimpleEnum.B")
+    assertEquals(30L, r2)
+    lua.destroy()
+  }
 
+  @Test
+  fun testJavaSimpleEnum(){
+    val lua = LuaInterpreter()
+    lua.register(top.lizhistudio.luajni.test.SimpleEnumJava::class.java)
+    val r1 = lua.execute("return SimpleEnumByJava.A")
+    assertEquals(1L, r1)
+    val r2 = lua.execute("return SimpleEnumByJava.B")
+    assertEquals(30L, r2)
+    lua.destroy()
+  }
+
+
+  @Test
+  fun testSimpleFunction(){
+    val lua = LuaInterpreter()
+    lua.register(top.lizhistudio.luajni.test.SimpleFunction::class.java)
+    val r1 = lua.execute("return add(1,2)")
+    assertEquals(3L, r1)
+    val r2 = lua.execute("return sub(10,2)")
+    assertEquals(8L, r2)
+    lua.destroy()
+  }
+
+  @Test
+  fun testCompanionObjectFunction(){
+    val lua = LuaInterpreter()
+    lua.register(top.lizhistudio.luajni.test.CompanionObjectFunction::class.java)
+    val r1 = lua.execute("return add(1,2)")
+    assertEquals(3L, r1)
+    val r2 = lua.execute("return sub(10,2)")
+    assertEquals(8L, r2)
+    lua.destroy()
+  }
+
+  @Test
+  fun testPackageFunction(){
+    val lua = LuaInterpreter()
+    lua.register("top.lizhistudio.luajni.test.SimpleFunctionKt")
+    val r1 = lua.execute("return testName('World')")
+    assertEquals("Hello World", r1)
+    lua.destroy()
+  }
+
+  @Test
+  fun testInsideClass(){
+    val lua = LuaInterpreter()
+    lua.register(SimpleTest::class.java,
+      InsideClass.InnerClass::class.java)
+    val r1 = lua.execute("""
+      local obj = InnerClass:test()
+      return obj:add()
+    """.trimIndent())
+    assertEquals(3L, r1)
+  }
 
 }

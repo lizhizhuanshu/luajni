@@ -1,11 +1,17 @@
 package top.lizhistudio.annotation.processor
 
 
+import androidx.privacysandbox.tools.kotlinx.metadata.jvm.KotlinClassMetadata
 import top.lizhistudio.annotation.processor.data.CommonField
 import top.lizhistudio.annotation.processor.data.CommonMethod
 import top.lizhistudio.annotation.processor.data.CommonParameter
 import top.lizhistudio.annotation.processor.data.CommonType
 import top.lizhistudio.annotation.processor.data.GeneratorContext
+import javax.lang.model.element.Element
+import javax.lang.model.element.ElementKind
+import javax.lang.model.element.ExecutableElement
+import javax.lang.model.element.Modifier
+import javax.lang.model.element.TypeElement
 
 object GenerateUtil {
 
@@ -90,16 +96,19 @@ object GenerateUtil {
     }
   }
 
-  fun generateCallMethodCode(method:CommonMethod,context: GeneratorContext):String{
+
+  fun callMethodCode(method:CommonMethod, context: GeneratorContext):String{
+    val staticStr = if(method.isStatic) "Static" else ""
+    val obj = if(method.isStatic) "clazz" else "obj"
     if(method.returnType.dimensions>0){
       return """
-          |jobject result = (*env)->CallObjectMethod(env,obj,classInfo->${toCMethodName(method)}${generateParametersName(method.parameters)});
+          |jobject result = (*env)->Call${staticStr}ObjectMethod(env,$obj,classInfo->${toCMethodName(method)}${generateParametersName(method.parameters)});
           |${java2luaException(context)}
           |if(result == NULL){
           |  lua_pushnil(L);
           |}else{
-          |  JavaArray* javaArray = luaL_newuserdata(L,sizeof(JavaArray));
-          |  javaArray->id = luaJniCacheJavaObject(env,result);
+          |  JavaArray* javaArray = lua_newuserdata(L,sizeof(JavaArray));
+          |  javaArray->id = luaJniCacheObject(env,result);
           |  (*env)->DeleteLocalRef(env,result);
           |  javaArray->elementType = ${generateArrayElementTypeCode(method.returnType.name)};
           |  luaL_setmetatable(L,"JavaArray");
@@ -108,47 +117,47 @@ object GenerateUtil {
     }
     return when(method.returnType.name){
       "void" -> """
-          |(*env)->CallVoidMethod(env,obj,classInfo->${toCMethodName(method)}${generateParametersName(method.parameters)});
+          |(*env)->Call${staticStr}VoidMethod(env,$obj,classInfo->${toCMethodName(method)}${generateParametersName(method.parameters)});
           |${java2luaException(context)}
           |lua_pushnil(L);
         """.trimMargin()
       "boolean" -> """
-          |jboolean result = (*env)->CallBooleanMethod(env,obj,classInfo->${toCMethodName(method)}${generateParametersName(method.parameters)});
+          |jboolean result = (*env)->Call${staticStr}BooleanMethod(env,$obj,classInfo->${toCMethodName(method)}${generateParametersName(method.parameters)});
           |${java2luaException(context)}
           |lua_pushboolean(L,result);
         """.trimMargin()
       "byte" -> """
-          |jbyte result = (*env)->CallByteMethod(env,obj,classInfo->${toCMethodName(method)}${generateParametersName(method.parameters)});
+          |jbyte result = (*env)->Call${staticStr}ByteMethod(env,$obj,classInfo->${toCMethodName(method)}${generateParametersName(method.parameters)});
           |${java2luaException(context)}
           |lua_pushinteger(L,result);
         """.trimMargin()
       "short" -> """
-          |jshort result = (*env)->CallShortMethod(env,obj,classInfo->${toCMethodName(method)}${generateParametersName(method.parameters)});
+          |jshort result = (*env)->Call${staticStr}ShortMethod(env,$obj,classInfo->${toCMethodName(method)}${generateParametersName(method.parameters)});
           |${java2luaException(context)}
           |lua_pushinteger(L,result);
         """.trimMargin()
       "int" -> """
-          |jint result = (*env)->CallIntMethod(env,obj,classInfo->${toCMethodName(method)}${generateParametersName(method.parameters)});
+          |jint result = (*env)->Call${staticStr}IntMethod(env,$obj,classInfo->${toCMethodName(method)}${generateParametersName(method.parameters)});
           |${java2luaException(context)}
           |lua_pushinteger(L,result);
         """.trimMargin()
       "long" -> """
-          |jlong result = (*env)->CallLongMethod(env,obj,classInfo->${toCMethodName(method)}${generateParametersName(method.parameters)});
+          |jlong result = (*env)->Call${staticStr}LongMethod(env,$obj,classInfo->${toCMethodName(method)}${generateParametersName(method.parameters)});
           |${java2luaException(context)}
           |lua_pushinteger(L,result);
         """.trimMargin()
       "float" -> """
-          |jfloat result = (*env)->CallFloatMethod(env,obj,classInfo->${toCMethodName(method)}${generateParametersName(method.parameters)});
+          |jfloat result = (*env)->Call${staticStr}FloatMethod(env,$obj,classInfo->${toCMethodName(method)}${generateParametersName(method.parameters)});
           |${java2luaException(context)}
           |lua_pushnumber(L,result);
         """.trimMargin()
       "double" -> """
-          |jdouble result = (*env)->CallDoubleMethod(env,obj,classInfo->${toCMethodName(method)}${generateParametersName(method.parameters)});
+          |jdouble result = (*env)->Call${staticStr}DoubleMethod(env,$obj,classInfo->${toCMethodName(method)}${generateParametersName(method.parameters)});
           |${java2luaException(context)}
           |lua_pushnumber(L,result);
         """.trimMargin()
       "java.lang.String" -> """
-          |jstring result = (jstring)(*env)->CallObjectMethod(env,obj,classInfo->${toCMethodName(method)}${generateParametersName(method.parameters)});
+          |jstring result = (jstring)(*env)->Call${staticStr}ObjectMethod(env,$obj,classInfo->${toCMethodName(method)}${generateParametersName(method.parameters)});
           |${java2luaException(context)}
           |if(result == NULL){
           |  lua_pushnil(L);
@@ -160,13 +169,13 @@ object GenerateUtil {
           |}
         """.trimMargin()
       else -> """
-          |jobject result = (*env)->CallObjectMethod(env,obj,classInfo->${toCMethodName(method)}${generateParametersName(method.parameters)});
+          |jobject result = (*env)->Call${staticStr}ObjectMethod(env,$obj,classInfo->${toCMethodName(method)}${generateParametersName(method.parameters)});
           |${java2luaException(context)}
           |if(result == NULL){
           |  lua_pushnil(L);
           |}else{
-          |  JavaObject* javaObject = luaL_newuserdata(L,sizeof(JavaObject));
-          |  javaObject->id = luaJniCacheJavaObject(env,result);
+          |  JavaObject* javaObject = lua_newuserdata(L,sizeof(JavaObject));
+          |  javaObject->id = luaJniCacheObject(env,result);
           |  (*env)->DeleteLocalRef(env,result);
           |  luaL_setmetatable(L,"${method.returnType.name}");
           |}
@@ -210,7 +219,8 @@ object GenerateUtil {
   }
 
   fun getMethodIdCode(method:CommonMethod):String{
-    return "classInfo->${toCMethodName(method)} = (*env)->GetMethodID(env,clazz,\"${method.name}\",\"${jniMethodType(method)}\");"
+    val staticStr = if(method.isStatic) "Static" else ""
+    return "classInfo->${toCMethodName(method)} = (*env)->Get${staticStr}MethodID(env,clazz,\"${method.name}\",\"${jniMethodType(method)}\");"
   }
 
   fun jniMethodType(method:CommonMethod):String{
@@ -237,6 +247,228 @@ object GenerateUtil {
     return if(type.dimensions == 0) base else "[".repeat(type.dimensions)+base
   }
 
-  fun MetaData.shortName() = className().substringAfterLast(".")
+  fun MetaData.shortName():String{
+    val name = className()
+    val lastStr = if(name.contains("$")) "$" else "."
+    return name.substring(name.lastIndexOf(lastStr)+1)
+  }
 
+  fun headerCode(metaData:MetaData):String{
+    val defineH = "${metaData.fileName()}_h".uppercase()
+    val code = """
+    |#ifndef $defineH
+    |#define $defineH
+    |#ifdef __cplusplus
+    |extern "C" {
+    |#endif
+    |#include<jni.h>
+    |int register_${metaData.injectToLuaMethodName()}(JNIEnv*env);
+    |int unregister_${metaData.injectToLuaMethodName()}(JNIEnv*env);
+    |#ifdef __cplusplus
+    |}
+    |#endif
+    |
+    |#endif //$defineH
+    """.trimMargin()
+    return code
+  }
+
+
+
+  fun parameterCheckTypeCode(parameterName:String,type:CommonType,context: GeneratorContext,
+                                     index: Int):String{
+    val generateSimpleTypeCheck = {name:String ->
+      """
+          |if(!lua_is${name}(L,$index)){
+          |${generateReleaseContextCode(context).mIndent(2)}
+          |  luaL_error(L,"Parameter $index must be a $name");
+          |};
+        """.trimMargin()
+    }
+
+    if(type.dimensions > 0){
+      val jniObjectName = jniObjectParameterName(parameterName)
+      return """
+          |JavaArray* $jniObjectName = NULL;
+          |if(!lua_isnoneornil(L,$index)){
+          |  $jniObjectName = (JavaArray*)luaL_testudata(L,$index,"JavaArray");
+          |  if($jniObjectName  == NULL){
+          |${generateReleaseContextCode(context).mIndent(4)}
+          |    luaL_error(L,"Parameter $index must be a JavaArray");
+          |  }
+          |}
+        """.trimMargin()
+    }
+
+    return when(type.name){
+      "boolean" -> generateSimpleTypeCheck("boolean")
+      "byte" -> generateSimpleTypeCheck("integer")
+      "short" -> generateSimpleTypeCheck("integer")
+      "int" -> generateSimpleTypeCheck("integer")
+      "long" -> generateSimpleTypeCheck("integer")
+      "float" -> generateSimpleTypeCheck("number")
+      "double" -> generateSimpleTypeCheck("number")
+      "java.lang.String" -> """
+          |if(!lua_isnoneornil(L,$index)&&!lua_isstring(L,$index)){
+          |${generateReleaseContextCode(context).mIndent(2)}
+          |  luaL_error(L,"Parameter $index must be a string");
+          |}
+        """.trimMargin()
+      else ->{
+        val jniObjectName = jniObjectParameterName(parameterName)
+        """
+          |JavaObject* $jniObjectName = NULL;
+          |if(!lua_isnoneornil(L,$index)){
+          |  $jniObjectName = (JavaObject*)luaL_testudata(L,$index,"${type.name}");
+          |  if($jniObjectName  == NULL){
+          |${generateReleaseContextCode(context).mIndent(4)}
+          |    luaL_error(L,"Parameter $index must be a ${type.name}");
+          |  }
+          |}
+        """.trimMargin()
+      }
+
+    }
+  }
+  fun parameterCheckTypeCode(parameter:CommonParameter,
+                                     context: GeneratorContext, index:Int):String{
+    return parameterCheckTypeCode(parameter.name,parameter.type,context,index)
+  }
+  fun parameterInitCode(parameterName: String,type:CommonType,
+                                context: GeneratorContext,index:Int,checkJniObjectParameter:Boolean = false):String{
+    val simpleParamInit = { name:String->
+      val jniType = GenerateUtil.toJniTypeName(type.name)
+      val paramName = toCParameterName(parameterName)
+      "$jniType $paramName = lua_to${name}(L,$index);"
+    }
+    return when(type.name){
+      "boolean" -> simpleParamInit("boolean")
+      "byte" -> simpleParamInit("integer")
+      "short" -> simpleParamInit("integer")
+      "int" -> simpleParamInit("integer")
+      "long" -> simpleParamInit("integer")
+      "float" -> simpleParamInit("number")
+      "double" -> simpleParamInit("number")
+      "java.lang.String" -> {
+        val paramName = toCParameterName(parameterName)
+        context.addDeleteLocalRef(paramName)
+        """
+            |jstring $paramName = NULL;
+            |if(lua_isstring(L,$index)){
+            |  const char* luaParam_$paramName = lua_tostring(L,$index);
+            |  $paramName = (*env)->NewStringUTF(env,luaParam_$paramName);
+            |  if(luaJniCatchJavaException(L,env)){
+            |${generateReleaseContextCode(context).mIndent(4)}
+            |    lua_error(L);
+            |  }
+            |}
+          """.trimMargin()
+      }
+      else -> {
+        val paramName = toCParameterName(parameterName)
+        val jniType = GenerateUtil.toJniTypeName(type.name)
+        val jniParameter = jniObjectParameterName(parameterName)
+        val checkJNIObjectCode = if(checkJniObjectParameter)"""
+            |$jniParameter = NULL;
+            |if(!lua_isnoneornil(L,$index)){
+            |  $jniParameter = (JavaObject*)luaL_testudata(L,$index,"${type.name}");
+            |  if($jniParameter == NULL){
+            |${generateReleaseContextCode(context).mIndent(4)}
+            |    luaL_error(L,"Parameter $index must be a ${type.name}");
+            |  }
+            |}
+          """.trimMargin() else ""
+        context.addPutBackObject(paramName)
+        """
+            |$jniType $paramName = NULL;
+            |$checkJNIObjectCode
+            |if($jniParameter != NULL){
+            |  $paramName = luaJniTakeObject($jniParameter->id);
+            |}
+          """.trimMargin()
+      }
+    }
+  }
+
+  fun parametersInitCode(method: CommonMethod, context: GeneratorContext,indexShift:Int=2,checkJniObjectParameter: Boolean=false):String{
+    return method.parameters.withIndex().joinToString("\n"){ (index,parameter) ->
+      parameterInitCode(parameter.name,parameter.type,context,index+indexShift,checkJniObjectParameter)
+    }
+  }
+  fun parametersCheckCode(method:CommonMethod,context: GeneratorContext,indexOrigin:Int=2):String{
+    return if(method.parameters.isEmpty()) "" else
+      method.parameters.withIndex().joinToString("\n"){ (index,parameter) ->
+        parameterCheckTypeCode(parameter,context,index+indexOrigin)
+      }
+  }
+  private fun jniObjectParameterName(parameterName:String):String {
+    return "jniObj_${parameterName}"
+  }
+
+  fun methodCallName(name:String):String{
+    return "method_${name}"
+  }
+  fun setGlobalFunctionCode(method:CommonMethod):String{
+    return """
+        lua_pushlightuserdata(L,classInfo);
+        lua_pushcclosure(L,${methodCallName(method.name)},1);
+        lua_setglobal(L,"${method.name}");
+      """.trimIndent()
+  }
+
+
+  fun isStaticFunction(method: ExecutableElement):Boolean{
+    val enclosingElement = method.enclosingElement
+    return  when {
+      // 顶层函数
+      enclosingElement.kind == ElementKind.PACKAGE -> true
+      // companion object 中的函数
+      enclosingElement.kind == ElementKind.CLASS &&
+              isCompanionObject(enclosingElement as TypeElement) -> true
+      // Java static 方法
+      method.modifiers.contains(Modifier.STATIC) -> true
+      else -> false
+    }
+  }
+  private fun rawIsKotlinObject(typeElement: TypeElement): Boolean {
+    // 检查是否有 kotlin.Metadata 注解
+    val metadataAnnotation = typeElement.getAnnotation(Metadata::class.java)
+    if (metadataAnnotation != null) {
+      // 检查 Metadata 注解的 kind 属性
+      val kind = metadataAnnotation.javaClass.getMethod("k").invoke(metadataAnnotation) as Int
+      // kind == 1 表示这是一个 Kotlin 对象
+      return kind == 1
+    }
+    return false
+  }
+
+  fun isKotlinObject(typeElement: TypeElement): Boolean {
+    val father = typeElement.enclosingElement
+    if(father is TypeElement){
+      return !isCompanionObject(father) && rawIsKotlinObject(typeElement)
+    }
+    return !isCompanionObject(typeElement) && rawIsKotlinObject(typeElement)
+  }
+
+  fun isCompanionObject(element: Element): Boolean {
+    val metadata: Metadata = element.getAnnotation(Metadata::class.java)
+    val data = KotlinClassMetadata.readStrict(metadata)
+    if (data is KotlinClassMetadata.Class) {
+      val kClass = data.kmClass
+      return kClass.companionObject != null
+    }
+    return false
+  }
+
+  fun getJvmName(element: Element): String {
+    var qualifiedName = (element as TypeElement).qualifiedName.toString()
+    var enclosingElement = element.enclosingElement
+    while (enclosingElement is TypeElement) {
+      qualifiedName = enclosingElement.qualifiedName.toString() + "$" + qualifiedName.substring(
+        qualifiedName.lastIndexOf('.') + 1
+      )
+      enclosingElement = enclosingElement.enclosingElement
+    }
+    return qualifiedName
+  }
 }
