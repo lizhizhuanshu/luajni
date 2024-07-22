@@ -11,10 +11,13 @@
       <SelectionState runConfigName="testSimpleEnvironment()">
         <option name="selectionMode" value="DROPDOWN" />
       </SelectionState>
-      <SelectionState runConfigName="LuaJniTest">
+      <SelectionState runConfigName="testWrapperTest()">
         <option name="selectionMode" value="DROPDOWN" />
       </SelectionState>
-      <SelectionState runConfigName="testWrapperTest()">
+      <SelectionState runConfigName="testCompanionObjectFunction()">
+        <option name="selectionMode" value="DROPDOWN" />
+      </SelectionState>
+      <SelectionState runConfigName="testJavaSimpleEnum()">
         <option name="selectionMode" value="DROPDOWN" />
       </SelectionState>
     </selectionStates>
