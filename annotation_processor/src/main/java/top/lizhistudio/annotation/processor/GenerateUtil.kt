@@ -76,8 +76,13 @@ object GenerateUtil {
     return "m_${field.name}"
   }
   fun toCMethodName(method:CommonMethod):String{
-    return "m_${method.name}"
+    return "m_${method.name}${if(method.order!=null) "_${method.order}" else ""}"
   }
+
+  fun toCConstructorName(method:CommonMethod):String{
+    return "c_constructor${if(method.order!=null) "_${method.order}" else ""}"
+  }
+
   fun toCParameterName(parameterName:String):String{
     return "p_${parameterName}"
   }
@@ -235,9 +240,7 @@ object GenerateUtil {
 
   fun GeneratorContext.addPutBackObject(name:String){
     needRelease.add("""
-      |if($name != NULL){
-      |  luaJniPutBackObject(env,$name);
-      |}
+      |luaJniPutBackObject(env,$name);
     """.trimMargin())
   }
 
@@ -258,6 +261,10 @@ object GenerateUtil {
   fun getMethodIdCode(method:CommonMethod):String{
     val staticStr = if(method.isStatic) "Static" else ""
     return "classInfo->${toCMethodName(method)} = (*env)->Get${staticStr}MethodID(env,clazz,\"${method.name}\",\"${jniMethodType(method)}\");"
+  }
+
+  fun getConstructorCode(method: CommonMethod):String{
+    return "classInfo->${toCConstructorName(method)} = (*env)->GetMethodID(env,clazz,\"<init>\",\"${jniMethodType(method)}\");"
   }
 
   fun jniMethodType(method:CommonMethod):String{
@@ -324,7 +331,7 @@ object GenerateUtil {
     }
     val generateWrapperTypeCheck = {name:String->
        """
-         |if(!lua_isnoneornil(L,$index)&&!lua_is${name}(L,$index)){
+         |if(!lua_isnil(L,$index)&&!lua_is${name}(L,$index)){
          |${generateReleaseContextCode(context).mIndent(2)}
          |  luaL_error(L,"Parameter $index must be a $name");
          |}
@@ -336,7 +343,7 @@ object GenerateUtil {
       val jniObjectName = jniObjectParameterName(parameterName)
       return """
           |JavaArray* $jniObjectName = NULL;
-          |if(!lua_isnoneornil(L,$index)){
+          |if(!lua_isnil(L,$index)){
           |  $jniObjectName = (JavaArray*)luaL_testudata(L,$index,"JavaArray");
           |  if($jniObjectName  == NULL){
           |${generateReleaseContextCode(context).mIndent(4)}
@@ -362,7 +369,7 @@ object GenerateUtil {
       "java.lang.Float" -> generateWrapperTypeCheck("number")
       "java.lang.Double" -> generateWrapperTypeCheck("number")
       "java.lang.String" -> """
-          |if(!lua_isnoneornil(L,$index)&&!lua_isstring(L,$index)){
+          |if(!lua_isnil(L,$index)&&lua_type(L,$index)!=LUA_TSTRING){
           |${generateReleaseContextCode(context).mIndent(2)}
           |  luaL_error(L,"Parameter $index must be a string");
           |}
@@ -371,7 +378,7 @@ object GenerateUtil {
         val jniObjectName = jniObjectParameterName(parameterName)
         """
           |JavaObject* $jniObjectName = NULL;
-          |if(!lua_isnoneornil(L,$index)){
+          |if(!lua_isnil(L,$index)){
           |  $jniObjectName = (JavaObject*)luaL_testudata(L,$index,"${type.name}");
           |  if($jniObjectName  == NULL){
           |${generateReleaseContextCode(context).mIndent(4)}

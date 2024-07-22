@@ -25,7 +25,8 @@ import javax.tools.StandardLocation
 @SupportedSourceVersion(SourceVersion.RELEASE_17)
 @SupportedAnnotationTypes("top.lizhistudio.annotation.LuaClass",
   "top.lizhistudio.annotation.LuaEnum",
-  "top.lizhistudio.annotation.LuaFunction")
+  "top.lizhistudio.annotation.LuaFunction",
+  "top.lizhistudio.annotation.LuaEnvironment")
 class AnnotationProcessor: AbstractProcessor() {
   private val generators = mutableListOf<Generator>()
   private fun insertFunction(element:ExecutableElement){
@@ -63,7 +64,7 @@ class AnnotationProcessor: AbstractProcessor() {
 
     p1?.getElementsAnnotatedWith(LuaEnvironment::class.java)?.forEach {
       it as TypeElement
-      generators.add(EnvironmentGenerator(it) )
+      generators.add(EnvironmentGenerator(it))
     }
 
     if(p1?.processingOver() == true){

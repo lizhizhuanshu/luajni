@@ -6,16 +6,38 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 import org.junit.Assert.*
+import top.lizhistudio.luajni.core.LuaError
 
 import top.lizhistudio.luajni.core.LuaInterpreter
+import top.lizhistudio.luajni.test.CompanionObjectFunction
 import top.lizhistudio.luajni.test.InsideClass
+import top.lizhistudio.luajni.test.SimpleEnumJava
 import top.lizhistudio.luajni.test.SimpleEnvironment
+import top.lizhistudio.luajni.test.SimpleFunction
 import top.lizhistudio.luajni.test.SimpleTest
 import top.lizhistudio.luajni.test.WrapperTest
 
 
 @RunWith(AndroidJUnit4::class)
 class LuaJniTest {
+
+  @Test
+  fun testException(){
+    val lua = LuaInterpreter()
+    try {
+      lua.execute("return 1 +")
+      fail("Should throw exception")
+    } catch (e: Exception) {
+      assertTrue(e is LuaError)
+    }
+    try{
+      lua.execute("assert(false)")
+      fail("Should throw exception")
+    }catch (e: Exception){
+      assertTrue(e is LuaError)
+    }
+    lua.destroy()
+  }
 
   @Test
   fun simpleTest(){
@@ -30,22 +52,39 @@ class LuaJniTest {
   fun simpleObjectTest(){
     val lua = LuaInterpreter()
     lua.register(SimpleTest::class.java)
-    val r1 = lua.execute("return SimpleTest.oneValue")
-    assertEquals(1L, r1)
-    val r2 = lua.execute("return SimpleTest.twoValue")
-    assertEquals(2L, r2)
-    val r3 = lua.execute("return SimpleTest:add()")
-    assertEquals(3L, r3)
-    val r4 = lua.execute("""
+    val obj = SimpleTest()
+    var code = """
+      assert(SimpleTest.oneValue == ${obj.oneValue})
+      assert(SimpleTest.twoValue == ${obj.twoValue})
+      assert(SimpleTest:add() == ${obj.add()})
+    """.trimIndent()
+    lua.execute(code)
+    obj.oneValue = 10
+    obj.twoValue = 20
+    code = """
       SimpleTest.oneValue = 10
-      return SimpleTest.oneValue
-    """.trimIndent())
-    assertEquals(10L, r4)
-    val r5 = lua.execute("""
-      SimpleTest:setTwo(20)
-      return SimpleTest.twoValue
-    """.trimIndent())
-    assertEquals(20L, r5)
+      SimpleTest.twoValue = 20
+      assert(SimpleTest.oneValue == ${obj.oneValue})
+      assert(SimpleTest.twoValue == ${obj.twoValue})
+      assert(SimpleTest:add() == ${obj.add()})
+    """.trimIndent()
+    lua.execute(code)
+    obj.setValue(55)
+    code ="""
+      SimpleTest:setValue(55)
+      assert(SimpleTest.oneValue == ${obj.oneValue})
+      assert(SimpleTest.twoValue == ${obj.twoValue})
+      assert(SimpleTest:add() == ${obj.add()})
+    """.trimIndent()
+    lua.execute(code)
+    obj.setValue(100, 200)
+    code ="""
+      SimpleTest:setValue(100, 200)
+      assert(SimpleTest.oneValue == ${obj.oneValue})
+      assert(SimpleTest.twoValue == ${obj.twoValue})
+      assert(SimpleTest:add() == ${obj.add()})
+    """.trimIndent()
+    lua.execute(code)
     lua.destroy()
   }
 
@@ -63,11 +102,12 @@ class LuaJniTest {
   @Test
   fun testJavaSimpleEnum(){
     val lua = LuaInterpreter()
-    lua.register(top.lizhistudio.luajni.test.SimpleEnumJava::class.java)
-    val r1 = lua.execute("return SimpleEnumByJava.A")
-    assertEquals(1L, r1)
-    val r2 = lua.execute("return SimpleEnumByJava.B")
-    assertEquals(30L, r2)
+    lua.register(SimpleEnumJava::class.java)
+    val code = """
+      assert(SimpleEnumByJava.A == ${SimpleEnumJava.A})
+      assert(SimpleEnumByJava.B == ${SimpleEnumJava.B})
+    """.trimIndent()
+    lua.execute(code)
     lua.destroy()
   }
 
@@ -75,22 +115,24 @@ class LuaJniTest {
   @Test
   fun testSimpleFunction(){
     val lua = LuaInterpreter()
-    lua.register(top.lizhistudio.luajni.test.SimpleFunction::class.java)
-    val r1 = lua.execute("return add(1,2)")
-    assertEquals(3L, r1)
-    val r2 = lua.execute("return sub(10,2)")
-    assertEquals(8L, r2)
+    lua.register(SimpleFunction::class.java)
+    val code = """
+      assert(add(1,2) == ${SimpleFunction.add(1,2)})
+      assert(sub(10,2) == ${SimpleFunction.sub(10,2)})
+    """.trimIndent()
+    lua.execute(code)
     lua.destroy()
   }
 
   @Test
   fun testCompanionObjectFunction(){
     val lua = LuaInterpreter()
-    lua.register(top.lizhistudio.luajni.test.CompanionObjectFunction::class.java)
-    val r1 = lua.execute("return add(1,2)")
-    assertEquals(3L, r1)
-    val r2 = lua.execute("return sub(10,2)")
-    assertEquals(8L, r2)
+    lua.register(CompanionObjectFunction::class.java)
+    val code = """
+      assert(add(1,2) == ${CompanionObjectFunction.add(1,2)})
+      assert(sub(10,2) == ${CompanionObjectFunction.sub(10,2)})
+    """.trimIndent()
+    lua.execute(code)
     lua.destroy()
   }
 
@@ -108,11 +150,12 @@ class LuaJniTest {
     val lua = LuaInterpreter()
     lua.register(SimpleTest::class.java,
       InsideClass.InnerClass::class.java)
-    val r1 = lua.execute("""
+    val obj = InsideClass.InnerClass()
+    lua.execute("""
       local obj = InnerClass:test()
-      return obj:add()
+      assert(obj:add() == ${obj.test().add()})
     """.trimIndent())
-    assertEquals(3L, r1)
+    lua.destroy()
   }
 
   @Test
@@ -121,40 +164,31 @@ class LuaJniTest {
     lua.register(
       SimpleTest::class.java,
       WrapperTest::class.java)
-    val r1 = lua.execute("""
-      local obj = WrapperTest('Hello')
-      return obj:test(1)
-    """.trimIndent())
-    assertEquals(2L, r1)
-
-    val r2 = lua.execute("""
-      local obj = WrapperTest('Hello')
-      return obj:test(nil)
-    """.trimIndent())
-    assertEquals(null, r2)
-
-    val r3 = lua.execute("""
-      local obj = WrapperTest('Hello')
-      return obj.name
-    """.trimIndent())
-    assertEquals("Hello", r3)
-
-    val r4 = lua.execute("""
-      local obj = WrapperTest('Hello')
-      return obj.simpleTest:add()
-    """.trimIndent())
-    assertEquals(3L, r4)
+    val obj = WrapperTest("Hello")
+    val code = """
+      local obj = WrapperTest("Hello")
+      assert(obj:test(1) == ${obj.test(1)})
+      assert(obj:test(nil) == ${obj.test(null)})
+      assert(obj.name == "${obj.name}")
+      assert(obj.value == ${obj.value})
+      assert(obj.simpleTest.oneValue == ${obj.simpleTest.oneValue})
+      assert(obj.simpleTest.twoValue == ${obj.simpleTest.twoValue})
+      assert(obj.simpleTest:add() == ${obj.simpleTest.add()})
+    """.trimIndent()
+    lua.execute(code)
+    lua.destroy()
   }
 
   @Test
   fun testSimpleEnvironment() {
     val lua = LuaInterpreter()
     lua.register(SimpleEnvironment::class.java)
-    val r1 = lua.execute("return NAME")
-    assertEquals("li zhi", r1)
-    val r2 = lua.execute("return AGE")
-    assertEquals(18L, r2)
-    val r3 = lua.execute("return MAN")
-    assertEquals(true, r3)
+    val code = """
+      assert(NAME == "${SimpleEnvironment.NAME}")
+      assert(AGE == ${SimpleEnvironment.AGE})
+      assert(MAN == ${SimpleEnvironment.MAN})
+    """.trimIndent()
+    lua.execute(code)
+    lua.destroy()
   }
 }

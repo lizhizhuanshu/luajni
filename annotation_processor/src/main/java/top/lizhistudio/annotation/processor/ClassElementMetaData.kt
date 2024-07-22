@@ -3,6 +3,7 @@ package top.lizhistudio.annotation.processor
 
 import top.lizhistudio.annotation.LuaClass
 import top.lizhistudio.annotation.LuaField
+import top.lizhistudio.annotation.processor.GenerateUtil.capitalizeFirstLetter
 import top.lizhistudio.annotation.processor.GenerateUtil.getJvmName
 import top.lizhistudio.annotation.processor.GenerateUtil.isStaticField
 import top.lizhistudio.annotation.processor.GenerateUtil.isStaticFunction
@@ -37,6 +38,14 @@ class ClassElementMetaData(private val clazz:TypeElement): ClassMetaData {
         else -> {}
       }
     }
+    if(clazz.getAnnotation(Metadata::class.java) != null){
+      fields.forEach {
+        methods.add(toGetterMethod(it))
+        if(!it.readonly) methods.add(toSetterMethod(it))
+      }
+      fields.clear()
+    }
+
 
   }
   override fun autoRegister(): Boolean {
@@ -70,10 +79,11 @@ class ClassElementMetaData(private val clazz:TypeElement): ClassMetaData {
   companion object {
     fun toCommonField(element:VariableElement):CommonField{
       val annotation = element.getAnnotation(LuaField::class.java)
-      val name = if(annotation == null || annotation.alias.isEmpty()) element.simpleName.toString() else annotation.alias
+      val name = element.simpleName.toString()
+      val alias = if(annotation?.alias.isNullOrEmpty()) name else annotation!!.alias
       val type = element.asType()
       val readonly = annotation?.readonly ?: false || element.modifiers.contains(Modifier.FINAL)
-      return CommonField(name, toCommonType(type),readonly = readonly,static = isStaticField(element))
+      return CommonField(name, toCommonType(type),readonly = readonly,static = isStaticField(element),alias)
     }
     fun toCommonType(type:TypeMirror):CommonType{
       var t = type
@@ -86,15 +96,37 @@ class ClassElementMetaData(private val clazz:TypeElement): ClassMetaData {
     }
     fun toCommonMethod(element:ExecutableElement):CommonMethod{
       val annotation = element.getAnnotation(LuaField::class.java)
-      val name = if(annotation == null || annotation.alias.isEmpty()) element.simpleName.toString() else annotation.alias
+      val name = element.simpleName.toString()
+      val alias = if(annotation?.alias.isNullOrEmpty()) name else annotation!!.alias
       val returnType = element.returnType
       val parameters = element.parameters.map { toCommonParameter(it) }
-      return CommonMethod(name, toCommonType(returnType),parameters,annotation?.method2field?:false,isStaticFunction(element))
+      return CommonMethod(name, toCommonType(returnType),parameters,annotation?.method2field?:false,isStaticFunction(element),alias)
     }
     fun toCommonParameter(element:VariableElement): CommonParameter {
       val name = element.simpleName.toString()
       val type = element.asType()
       return CommonParameter(name, toCommonType(type))
+    }
+
+    private fun toGetterName(name:String):String{
+      return "get${name.capitalizeFirstLetter()}"
+    }
+    private fun toSetterName(name:String):String{
+      return "set${name.capitalizeFirstLetter()}"
+    }
+    private fun toGetterMethod(field:CommonField):CommonMethod{
+      return CommonMethod(toGetterName(field.name),
+        field.type,emptyList(),
+        true,
+        field.static,
+        field.alias)
+    }
+    private fun toSetterMethod(field:CommonField):CommonMethod{
+      return CommonMethod(toSetterName(field.name),
+        CommonType("void",0),
+        listOf(CommonParameter("value",field.type)),
+        true,
+        field.static,field.alias)
     }
   }
 }

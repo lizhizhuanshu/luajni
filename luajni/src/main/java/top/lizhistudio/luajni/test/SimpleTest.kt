@@ -25,6 +25,17 @@ class SimpleTest {
   fun setTwo(value:Int){
     twoValue = value
   }
+
+  @LuaField
+  fun setValue(value:Int){
+    oneValue = value
+  }
+
+  @LuaField
+  fun setValue(value:Int, value2:Int){
+    oneValue = value
+    twoValue = value2
+  }
 }
 
 

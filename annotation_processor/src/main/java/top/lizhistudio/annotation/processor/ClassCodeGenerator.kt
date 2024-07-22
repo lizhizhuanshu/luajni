@@ -5,6 +5,7 @@ import top.lizhistudio.annotation.processor.GenerateUtil.addPutBackObject
 import top.lizhistudio.annotation.processor.GenerateUtil.generateArrayElementTypeCode
 import top.lizhistudio.annotation.processor.GenerateUtil.generateParametersName
 import top.lizhistudio.annotation.processor.GenerateUtil.generateReleaseContextCode
+import top.lizhistudio.annotation.processor.GenerateUtil.getConstructorCode
 import top.lizhistudio.annotation.processor.GenerateUtil.getFieldIdCode
 import top.lizhistudio.annotation.processor.GenerateUtil.getMethodIdCode
 import top.lizhistudio.annotation.processor.GenerateUtil.java2luaException
@@ -12,6 +13,7 @@ import top.lizhistudio.annotation.processor.GenerateUtil.jniMethodType
 import top.lizhistudio.annotation.processor.GenerateUtil.mIndent
 import top.lizhistudio.annotation.processor.GenerateUtil.setGlobalFunctionCode
 import top.lizhistudio.annotation.processor.GenerateUtil.shortName
+import top.lizhistudio.annotation.processor.GenerateUtil.toCConstructorName
 import top.lizhistudio.annotation.processor.GenerateUtil.toCFieldName
 import top.lizhistudio.annotation.processor.GenerateUtil.toCMethodName
 import top.lizhistudio.annotation.processor.GenerateUtil.toCParameterName
@@ -19,6 +21,7 @@ import top.lizhistudio.annotation.processor.data.CommonField
 import top.lizhistudio.annotation.processor.data.CommonMethod
 import top.lizhistudio.annotation.processor.data.CommonType
 import top.lizhistudio.annotation.processor.data.GeneratorContext
+import top.lizhistudio.annotation.processor.data.indexName
 import kotlin.math.max
 
 class ClassCodeGenerator(private val clazz:ClassMetaData):Generator,
@@ -26,6 +29,27 @@ class ClassCodeGenerator(private val clazz:ClassMetaData):Generator,
   ,FunctionContainer
 {
   private val functions = mutableListOf<CommonMethod>()
+  private val sortedMethods = mutableListOf<MutableList<CommonMethod>>()
+  private fun methodSort(method:CommonMethod){
+    if(method.toField) return
+    val indexName = method.indexName()
+    var table = sortedMethods.find { it[0].indexName() == indexName }
+    if(table == null){
+      val newTable = mutableListOf<CommonMethod>()
+      sortedMethods.add(newTable)
+      table = newTable
+    }
+    if(table.isNotEmpty()) method.order = table.size
+    table.add(method)
+  }
+  init{
+    clazz.methods().forEach {
+      methodSort(it)
+    }
+    clazz.constructors().withIndex().forEach { (index,constructor) ->
+      if(index>0) constructor.order = index
+    }
+  }
   override fun headerCode(): String {
     return GenerateUtil.headerCode(this)
   }
@@ -73,28 +97,26 @@ class ClassCodeGenerator(private val clazz:ClassMetaData):Generator,
       "jmethodID ${toCMethodName(method)};"
     }
     val code = """
-    |typedef struct {
+    |typedef struct ClassInfo{
     |  const char* name;
     |  int64_t id;
     |${fieldsCode.mIndent(2)}
     |${methodsCode.mIndent(2)}
     |${functionCode.mIndent(2)}
+    |${clazz.constructors().joinToString("\n"){"jmethodID ${toCConstructorName(it)};"}.mIndent(2)}
     |}ClassInfo;
     """.trimMargin()
     return code
   }
   private fun methodFunctionCode():String{
-    val methods = mutableListOf<CommonMethod>()
-    clazz.methods().forEach {
-      if(it.toField) return@forEach
-      methods.add(it)
+    functions.forEach {
+      methodSort(it)
     }
-    methods.addAll(functions)
-    return methods.joinToString("\n"){ method ->
+    return sortedMethods.joinToString("\n"){ method ->
       methodFunctionCode(method)
     }
   }
-  private fun methodFunctionCode(method:CommonMethod):String{
+  private fun oneMethodCode(method:CommonMethod):String{
     val context = GeneratorContext()
     val initObject = if(!method.isStatic){
       context.addPutBackObject("obj")
@@ -109,19 +131,33 @@ class ClassCodeGenerator(private val clazz:ClassMetaData):Generator,
       """.trimMargin()
     }
     val indexOrigin = if(method.isStatic) 1 else 2
-
     return """
-      |static int ${methodFunctionName(method.name)}(lua_State*L){
-      |  JNIEnv* env = luaJniGetEnv(L);
-      |  ClassInfo* classInfo = (ClassInfo*)lua_touserdata(L,lua_upvalueindex(1));
+      |if(${isParametersTypeCode(method,context,indexOrigin)}){
       |${initObject.mIndent(2)}
-      |${GenerateUtil.parametersCheckCode(method,context,indexOrigin).mIndent(2)}
       |${GenerateUtil.parametersInitCode(method,context,indexOrigin).mIndent(2)}
       |${GenerateUtil.callMethodCode(method,context).mIndent(2)}
       |${generateReleaseContextCode(context).mIndent(2)}
       |  return 1;
       |}
-      """.trimMargin()
+    """.trimMargin()
+  }
+  private fun methodFunctionCode(methods:List<CommonMethod>):String{
+    var count = 0
+    val code = methods.joinToString("\n"){ method ->
+      val code = oneMethodCode(method)
+      if(count++ == 0) code else "else $code"
+    }
+    return """
+      |static int ${methodFunctionName(methods[0].indexName())}(lua_State*L){
+      |  JNIEnv* env = luaJniGetEnv(L);
+      |  ClassInfo* classInfo = (ClassInfo*)lua_touserdata(L,lua_upvalueindex(1));
+      |${code.mIndent(2)}
+      |  else{
+      |    luaL_error(L,"method ${methods[0].indexName()} parameter mismatch");
+      |  }
+      |  return 0;
+      |}
+    """.trimMargin()
   }
   private fun indexMethodCode():String{
     val context = GeneratorContext()
@@ -130,8 +166,14 @@ class ClassCodeGenerator(private val clazz:ClassMetaData):Generator,
     val fieldsCode = clazz.fields().joinToString("\n"){ field ->
       if(count++ ==0) fieldIndexCode(field,context) else "else "+ fieldIndexCode(field,context)
     }
-    val methodsCode = clazz.methods().joinToString("\n"){ method ->
-      if(count++ ==0) methodIndexCode(method,context) else "else "+ methodIndexCode(method,context)
+    val methods = mutableListOf<CommonMethod>()
+    methods.addAll(sortedMethods.map { it[0] })
+    clazz.methods().forEach {
+      if(it.toField && it.parameters.isEmpty()) methods.add(it)
+    }
+    val methodsCode = methods.joinToString("\n"){ method ->
+      val code = methodIndexCode(method,context)
+      if(count++ ==0) code else "else $code"
     }
     return """
     |static int _indexMethod(lua_State*L){
@@ -191,7 +233,7 @@ class ClassCodeGenerator(private val clazz:ClassMetaData):Generator,
 
   private fun fieldNewIndexCode(field:CommonField,context:GeneratorContext):String{
     val top = context.needRelease.size
-    return memberNameCompareCode(field.name,"""
+    return memberNameCompareCode(field.indexName(),"""
       |${GenerateUtil.parameterCheckTypeCode(field.name,field.type,context,3)}
       |${GenerateUtil.parameterInitCode(field.name,field.type,context,3)}
       |${setFieldCode(field)}
@@ -202,7 +244,7 @@ class ClassCodeGenerator(private val clazz:ClassMetaData):Generator,
 
   private fun methodNewIndexCode(method: CommonMethod, context:GeneratorContext):String{
     val top = context.needRelease.size
-    return memberNameCompareCode(method.name,"""
+    return memberNameCompareCode(method.indexName(),"""
       |${GenerateUtil.parameterCheckTypeCode(method.parameters[0],context,3)}
       |${GenerateUtil.parametersInitCode(method,context,3)}
       |${GenerateUtil.callMethodCode(method,context)}
@@ -217,9 +259,13 @@ class ClassCodeGenerator(private val clazz:ClassMetaData):Generator,
     val initMethodIdCode = clazz.methods().joinToString("\n"){
       getMethodIdCode(it)
     }
+    val initConstructorIdCode = clazz.constructors().joinToString("\n") {
+      getConstructorCode(it)
+    }
     return """
       |$initFieldsCode
       |$initMethodIdCode
+      |$initConstructorIdCode
     """.trimMargin()
   }
 
@@ -252,7 +298,8 @@ class ClassCodeGenerator(private val clazz:ClassMetaData):Generator,
   private fun eachConstructorMethod(context: GeneratorContext):String{
     var count = 0
     return clazz.constructors().joinToString("\n"){ constructor ->
-      if(count++ >0) "else "+constructorMethodCode(constructor,context.clone()) else constructorMethodCode(constructor,context.clone())
+      val code = constructorMethodCode(constructor,context.clone())
+      if(count++ >0) "else $code" else code
     } + """
       |else{
       |${generateReleaseContextCode(context).mIndent(2)}
@@ -260,48 +307,12 @@ class ClassCodeGenerator(private val clazz:ClassMetaData):Generator,
       |}
     """.trimMargin()
   }
-  private fun constructorMethodEqualsCode(constructor: CommonMethod,context: GeneratorContext):String{
-    return if(constructor.parameters.isEmpty()) "lua_gettop(L) == 0" else {
-      val parameters = constructor.parameters.withIndex().joinToString("&&"){(index,parameter)->
-        isParameterTypeCode(parameter.type,index+1,context)
-      }
-      "lua_gettop(L) == ${constructor.parameters.size} &&\n$parameters"
-    }
-  }
-  private fun isParameterTypeCode(type:CommonType,index:Int,context: GeneratorContext):String{
-    if(type.dimensions >0){
-      return "(lua_isnil(L,$index) || equalsJavaArray(lua_testudata(L,$index,\"JavaArray\"),${type.dimensions},\"${type.name}\",${generateArrayElementTypeCode(type.name)}))"
-    }
-    val wrapperCode = {name:String->
-      "(lua_isnil(L,$index) || lua_is${name}(L,$index))"
-    }
-    return when(type.name){
-      "boolean" ->  "lua_isboolean(L,$index)"
-      "byte" ->  "lua_isinteger(L,$index)"
-      "short" -> "lua_isinteger(L,$index)"
-      "int" ->  "lua_isinteger(L,$index)"
-      "long" ->  "lua_isinteger(L,$index)"
-      "float" ->  "lua_isnumber(L,$index)"
-      "double" ->  "lua_isnumber(L,$index)"
-      "java.lang.String" ->  "(lua_isnil(L,$index) || lua_isstring(L,$index))"
-      "java.lang.Boolean"-> wrapperCode("boolean")
-      "java.lang.Byte"-> wrapperCode("integer")
-      "java.lang.Short"-> wrapperCode("integer")
-      "java.lang.Integer"-> wrapperCode("integer")
-      "java.lang.Long"-> wrapperCode("integer")
-      "java.lang.Float"-> wrapperCode("number")
-      "java.lang.Double"-> wrapperCode("number")
-      "java.lang.Character" -> wrapperCode("integer")
-      else -> "(lua_isnil(L,$index) || lua_testudata(L,$index,\"${type.name}\") != NULL)"
-    }
-  }
+
   private fun constructorMethodCode(constructor:CommonMethod,context: GeneratorContext):String{
     return """
       |if(${constructorMethodEqualsCode(constructor,context)}){
       |${GenerateUtil.parametersInitCode(constructor,context,1,true).mIndent(2)}
-      |  jmethodID methodID = (*env)->GetMethodID(env,clazz,"<init>","${jniMethodType(constructor)}");
-      |${java2luaException(context).mIndent(2)}
-      |  obj = (*env)->NewObject(env,clazz,methodID${generateParametersName(constructor.parameters)});
+      |  obj = (*env)->NewObject(env,clazz,classInfo->${toCConstructorName(constructor)}${generateParametersName(constructor.parameters)});
       |${java2luaException(context).mIndent(2)}
       |}
     """.trimMargin()
@@ -400,21 +411,20 @@ class ClassCodeGenerator(private val clazz:ClassMetaData):Generator,
     }
 
     private fun fieldIndexCode(field: CommonField, context: GeneratorContext): String {
-      return memberNameCompareCode(field.name,GenerateUtil.generateGetField(field,context))
+      return memberNameCompareCode(field.indexName(),GenerateUtil.generateGetField(field,context))
     }
 
 
     private fun simpleMethodIndexCode(method: CommonMethod): String {
       val code = """
       |lua_pushvalue(L,lua_upvalueindex(1));
-      |lua_pushcclosure(L,${methodFunctionName(method.name)},1);
+      |lua_pushcclosure(L,${methodFunctionName(method.indexName())},1);
       """.trimMargin()
-      return memberNameCompareCode(method.name,code)
+      return memberNameCompareCode(method.indexName(),code)
     }
 
     private fun methodToFieldIndexCode(method: CommonMethod, context: GeneratorContext): String {
-      if(method.parameters.isNotEmpty()) return ""
-      return memberNameCompareCode(method.name,GenerateUtil.callMethodCode(method,context))
+      return memberNameCompareCode(method.indexName(),GenerateUtil.callMethodCode(method,context))
     }
 
     private fun methodIndexCode(method: CommonMethod, context: GeneratorContext): String {
@@ -444,5 +454,47 @@ class ClassCodeGenerator(private val clazz:ClassMetaData):Generator,
 
   override fun putFunction(f: CommonMethod) {
     functions.add(f)
+  }
+
+  private fun isParametersTypeCode(method:CommonMethod,
+                                   context: GeneratorContext,
+                                   origin:Int=1):String{
+    return if(method.parameters.isEmpty()) "lua_gettop(L) == ${origin-1}" else {
+      val parameters = method.parameters.withIndex().joinToString("&&"){ (index,parameter)->
+        isParameterTypeCode(parameter.type,index+origin,context)
+      }
+      "lua_gettop(L) == ${method.parameters.size+origin-1} && $parameters"
+    }
+  }
+
+  private fun constructorMethodEqualsCode(method: CommonMethod, context: GeneratorContext):String{
+    return isParametersTypeCode(method,context,1)
+  }
+  private fun isParameterTypeCode(type:CommonType,index:Int,context: GeneratorContext):String{
+    if(type.dimensions >0){
+      return "(lua_isnil(L,$index) || equalsJavaArray(lua_testudata(L,$index,\"JavaArray\"),${type.dimensions},\"${type.name}\",${generateArrayElementTypeCode(type.name)}))"
+    }
+    val wrapperCode = {name:String->
+      "(lua_isnil(L,$index) || lua_is${name}(L,$index))"
+    }
+    return when(type.name){
+      "boolean" ->  "lua_isboolean(L,$index)"
+      "byte" ->  "lua_isinteger(L,$index)"
+      "short" -> "lua_isinteger(L,$index)"
+      "int" ->  "lua_isinteger(L,$index)"
+      "long" ->  "lua_isinteger(L,$index)"
+      "float" ->  "lua_isnumber(L,$index)"
+      "double" ->  "lua_isnumber(L,$index)"
+      "java.lang.String" ->  "(lua_isnil(L,$index) || lua_type(L,$index) == LUA_TSTRING)"
+      "java.lang.Boolean"-> wrapperCode("boolean")
+      "java.lang.Byte"-> wrapperCode("integer")
+      "java.lang.Short"-> wrapperCode("integer")
+      "java.lang.Integer"-> wrapperCode("integer")
+      "java.lang.Long"-> wrapperCode("integer")
+      "java.lang.Float"-> wrapperCode("number")
+      "java.lang.Double"-> wrapperCode("number")
+      "java.lang.Character" -> wrapperCode("integer")
+      else -> "(lua_isnil(L,$index) || lua_testudata(L,$index,\"${type.name}\") != NULL)"
+    }
   }
 }
