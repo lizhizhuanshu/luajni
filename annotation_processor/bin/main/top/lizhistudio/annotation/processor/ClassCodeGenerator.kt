@@ -283,7 +283,7 @@ class ClassCodeGenerator(private val clazz:ClassMetaData):Generator,
     return """
       |if(${constructorMethodEqualsCode(constructor,context)}){
       |${parametersInitCode(constructor,context,1,true).mIndent(2)}
-      |  jmethodID methodID = (env*)->GetMethodID(env,clazz,"<init>","${jniMethodType(constructor)}");
+      |  jmethodID methodID = (*env)->GetMethodID(env,clazz,"<init>","${jniMethodType(constructor)}");
       |${java2luaException(context).mIndent(2)}
       |  obj = (*env)->NewObject(env,clazz,methodID${generateParametersName(constructor.parameters)});
       |${java2luaException(context).mIndent(2)}

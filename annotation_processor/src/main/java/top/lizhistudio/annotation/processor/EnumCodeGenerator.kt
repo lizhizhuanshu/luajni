@@ -51,10 +51,11 @@ class EnumCodeGenerator(private val clazz: TypeElement):Generator {
 
   private fun injectMethodCode():String{
     return """
-      |void ${injectToLuaMethodName()}(struct lua_State*L,JNIEnv*env,void*_){
+      |static int ${injectToLuaMethodName()}(struct lua_State*L,JNIEnv*env,void*_){
       |  lua_createtable(L,0,${fields.size});
       |${fields.joinToString("\n") { "lua_pushinteger(L,${it.value});lua_setfield(L,-2,\"${it.name}\");" }.mIndent(2)}
       |  lua_setglobal(L,"${name()}");
+      |  return 0;
       |}
     """.trimMargin()
   }

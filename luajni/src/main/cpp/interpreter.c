@@ -100,6 +100,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM * vm, void * reserved)
     JNIEnv * env = NULL;
     if ((*vm)->GetEnv(vm,(void**)&env, JNI_VERSION_1_6) != JNI_OK)
         return -1;
+    luaJniInitContext(env);
     luaJniExtensionRegisterAll(env);
     return  JNI_VERSION_1_6;
 }
@@ -110,5 +111,6 @@ JNIEXPORT void JNI_OnUnload(JavaVM * vm, void * reserved)
     if ((*vm)->GetEnv(vm,(void**)&env, JNI_VERSION_1_6) != JNI_OK)
         return;
     luaJniExtensionUnregisterAll(env);
+    luaJniReleaseContext(env);
 }
 

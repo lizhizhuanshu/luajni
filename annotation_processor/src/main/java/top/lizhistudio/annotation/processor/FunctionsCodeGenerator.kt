@@ -55,8 +55,9 @@ class FunctionsCodeGenerator(private val clazz:TypeElement):Generator,FunctionCo
 
   private fun injectMethodCode():String{
     return """
-      |void ${injectToLuaMethodName()}(struct lua_State*L,JNIEnv*env,void*classInfo){
+      |static int ${injectToLuaMethodName()}(struct lua_State*L,JNIEnv*env,void*classInfo){
       |${functions.joinToString("\n") { setGlobalFunctionCode(it) }.mIndent(2)}
+      |  return 0;
       |}
     """.trimMargin()
   }

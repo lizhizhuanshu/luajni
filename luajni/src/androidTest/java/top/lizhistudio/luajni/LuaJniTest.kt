@@ -9,7 +9,9 @@ import org.junit.Assert.*
 
 import top.lizhistudio.luajni.core.LuaInterpreter
 import top.lizhistudio.luajni.test.InsideClass
+import top.lizhistudio.luajni.test.SimpleEnvironment
 import top.lizhistudio.luajni.test.SimpleTest
+import top.lizhistudio.luajni.test.WrapperTest
 
 
 @RunWith(AndroidJUnit4::class)
@@ -113,4 +115,46 @@ class LuaJniTest {
     assertEquals(3L, r1)
   }
 
+  @Test
+  fun testWrapperTest(){
+    val lua = LuaInterpreter()
+    lua.register(
+      SimpleTest::class.java,
+      WrapperTest::class.java)
+    val r1 = lua.execute("""
+      local obj = WrapperTest('Hello')
+      return obj:test(1)
+    """.trimIndent())
+    assertEquals(2L, r1)
+
+    val r2 = lua.execute("""
+      local obj = WrapperTest('Hello')
+      return obj:test(nil)
+    """.trimIndent())
+    assertEquals(null, r2)
+
+    val r3 = lua.execute("""
+      local obj = WrapperTest('Hello')
+      return obj.name
+    """.trimIndent())
+    assertEquals("Hello", r3)
+
+    val r4 = lua.execute("""
+      local obj = WrapperTest('Hello')
+      return obj.simpleTest:add()
+    """.trimIndent())
+    assertEquals(3L, r4)
+  }
+
+  @Test
+  fun testSimpleEnvironment() {
+    val lua = LuaInterpreter()
+    lua.register(SimpleEnvironment::class.java)
+    val r1 = lua.execute("return NAME")
+    assertEquals("li zhi", r1)
+    val r2 = lua.execute("return AGE")
+    assertEquals(18L, r2)
+    val r3 = lua.execute("return MAN")
+    assertEquals(true, r3)
+  }
 }

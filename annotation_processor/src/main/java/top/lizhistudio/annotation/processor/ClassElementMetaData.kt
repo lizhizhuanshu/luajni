@@ -1,10 +1,10 @@
 package top.lizhistudio.annotation.processor
 
 
-import top.lizhistudio.annotation.processor.ClassMetaData
 import top.lizhistudio.annotation.LuaClass
 import top.lizhistudio.annotation.LuaField
 import top.lizhistudio.annotation.processor.GenerateUtil.getJvmName
+import top.lizhistudio.annotation.processor.GenerateUtil.isStaticField
 import top.lizhistudio.annotation.processor.GenerateUtil.isStaticFunction
 import top.lizhistudio.annotation.processor.data.CommonField
 import top.lizhistudio.annotation.processor.data.CommonMethod
@@ -70,10 +70,10 @@ class ClassElementMetaData(private val clazz:TypeElement): ClassMetaData {
   companion object {
     fun toCommonField(element:VariableElement):CommonField{
       val annotation = element.getAnnotation(LuaField::class.java)
-      val name = if(annotation.alias.isEmpty()) element.simpleName.toString() else annotation.alias
+      val name = if(annotation == null || annotation.alias.isEmpty()) element.simpleName.toString() else annotation.alias
       val type = element.asType()
-      val readonly = annotation.readonly || element.modifiers.contains(Modifier.FINAL)
-      return CommonField(name, toCommonType(type),readonly = readonly)
+      val readonly = annotation?.readonly ?: false || element.modifiers.contains(Modifier.FINAL)
+      return CommonField(name, toCommonType(type),readonly = readonly,static = isStaticField(element))
     }
     fun toCommonType(type:TypeMirror):CommonType{
       var t = type

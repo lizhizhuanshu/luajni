@@ -1,6 +1,6 @@
 package top.lizhistudio.annotation
 
-@Target(AnnotationTarget.FIELD, AnnotationTarget.FUNCTION)
+@Target(AnnotationTarget.FIELD, AnnotationTarget.FUNCTION,AnnotationTarget.CONSTRUCTOR)
 @Retention(AnnotationRetention.SOURCE)
 annotation class LuaField(
   val alias: String = "",

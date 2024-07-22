@@ -31,21 +31,47 @@ typedef struct HashMap{
     KeyValue *table[TABLE_SIZE];
 }HashMap;
 
+typedef struct Context{
+    HashMap map;
+
+    jclass booleanClass;
+    jclass byteClass;
+    jclass charClass;
+    jclass shortClass;
+    jclass intClass;
+    jclass longClass;
+    jclass floatClass;
+    jclass doubleClass;
+
+    jmethodID newBoolean;
+    jmethodID newByte;
+    jmethodID newChar;
+    jmethodID newShort;
+    jmethodID newInt;
+    jmethodID newLong;
+    jmethodID newFloat;
+    jmethodID newDouble;
+
+    jmethodID booleanValue;
+    jmethodID byteValue;
+    jmethodID charValue;
+    jmethodID shortValue;
+    jmethodID intValue;
+    jmethodID longValue;
+    jmethodID floatValue;
+    jmethodID doubleValue;
+}Context;
 
 
-static HashMap *g_map = NULL;
-
-
-
-
-HashMap* createHashMap();
 unsigned int hashMapHash(const char*key);
 void hashMapPut(HashMap*map, const char*key, LuaJniInjectMethod method, void*userData);
 Value* hashMapGet(HashMap*map, const char*key);
 void* hashMapRemove(HashMap*map, const char*key);
 void hashMapClear(HashMap*map);
-void hashMapDestroy(HashMap*map);
 HashMap *ensureHashMap();
+
+static Context * context = NULL;
+
 
 
 int luaJniEqualJavaArray(JavaArray* a, const char*className, int level, enum ARRAY_ELEMENT_TYPE elementType){
@@ -446,112 +472,128 @@ int luaJniRegisteredCount(){
     return count;
 }
 
-
-int luaJniPushIntField(lua_State*L, JNIEnv *env, jobject obj,jfieldID field){
-    jint value = (*env)->GetIntField(env,obj,field);
-    if(luaJniCatchJavaException(L, env)) return 0;
-    lua_pushinteger(L,value);
-    return 1;
-}
-int luaJniPushLongField(lua_State*L, JNIEnv *env, jobject obj,jfieldID field){
-    jlong value = (*env)->GetLongField(env,obj,field);
-    if(luaJniCatchJavaException(L, env)) return 0;
-    lua_pushinteger(L,value);
-    return 1;
-}
-int luaJniPushShortField(lua_State*L, JNIEnv *env, jobject obj,jfieldID field){
-    jshort value = (*env)->GetShortField(env,obj,field);
-    if(luaJniCatchJavaException(L, env)) return 0;
-    lua_pushinteger(L,value);
-    return 1;
-}
-int luaJniPushByteField(lua_State*L, JNIEnv *env, jobject obj,jfieldID field){
-    jbyte value = (*env)->GetByteField(env,obj,field);
-    if(luaJniCatchJavaException(L, env)) return 0;
-    lua_pushinteger(L,value);
-    return 1;
-}
-int luaJniPushBooleanField(lua_State*L, JNIEnv *env, jobject obj,jfieldID field){
-    jboolean value = (*env)->GetBooleanField(env,obj,field);
-    if(luaJniCatchJavaException(L, env)) return 0;
-    lua_pushboolean(L,value);
-    return 1;
-}
-int luaJniPushFloatField(lua_State*L, JNIEnv *env, jobject obj,jfieldID field){
-    jfloat value = (*env)->GetFloatField(env,obj,field);
-    if(luaJniCatchJavaException(L, env)) return 0;
-    lua_pushnumber(L,value);
-    return 1;
-}
-int luaJniPushDoubleField(lua_State*L, JNIEnv *env, jobject obj,jfieldID field){
-    jdouble value = (*env)->GetDoubleField(env,obj,field);
-    if(luaJniCatchJavaException(L, env)) return 0;
-    lua_pushnumber(L,value);
-    return 1;
-}
-int luaJniPushCharField(lua_State*L, JNIEnv *env, jobject obj,jfieldID field){
-    jchar value = (*env)->GetCharField(env,obj,field);
-    if(luaJniCatchJavaException(L, env)) return 0;
-    lua_pushinteger(L,value);
-    return 1;
-}
-int luaJniPushStringField(lua_State*L, JNIEnv *env, jobject obj,jfieldID field){
-    jstring value = (*env)->GetObjectField(env,obj,field);
-    if(luaJniCatchJavaException(L, env)) return 0;
-    if(value != NULL){
-        const char *str = (*env)->GetStringUTFChars(env,value,0);
-        lua_pushstring(L,str);
-        (*env)->ReleaseStringUTFChars(env,value,str);
-        (*env)->DeleteLocalRef(env,value);
-    }else{
-        lua_pushnil(L);
-    }
-    return 1;
-}
-int luaJniPushObjectField(lua_State*L,JNIEnv*env,jobject obj,jfieldID field,const char*className){
-    jobject value = (*env)->GetObjectField(env,obj,field);
-    if(luaJniCatchJavaException(L, env)) return 0;
-    if(value != NULL){
-        int64_t id = luaJniCacheObject(env, value);
-        (*env)->DeleteLocalRef(env,value);
-        JavaObject *object = (JavaObject *) lua_newuserdata(L,sizeof(JavaObject));
-        object->id = id;
-        int r = luaL_getmetatable(L,className);
-        if(r){
-            lua_setmetatable(L,-2);
-        }else{
-            lua_pushfstring(L,"can not find metatable for %s",className);
-            return 0;
-        }
-    }else{
-        lua_pushnil(L);
-    }
-    return 1;
-}
-int luaJniPushArrayField(lua_State*L,JNIEnv*env,jobject obj,jfieldID field,const char*className,int level,
-                   enum ARRAY_ELEMENT_TYPE elementType){
-    jobjectArray value = (*env)->GetObjectField(env,obj,field);
-    if(luaJniCatchJavaException(L, env)) return 0;
-    if(value != NULL){
-        JavaArray *array = (JavaArray *) lua_newuserdata(L,sizeof(JavaArray));
-        array->id = (int64_t)value;
-        array->level = level;
-        array->name = className;
-        array->elementType = elementType;
-        luaL_getmetatable(L,JAVA_ARRAY_META_NAME);
-        lua_setmetatable(L,-2);
-    }else{
-        lua_pushnil(L);
-    }
-    return 1;
+#define LUA_JNI_PUSH_BASE_FIELD(javaUpType,javaDownType,luaType,type,staticStr)\
+int luaJniPush##staticStr##javaUpType##Field(lua_State*L, JNIEnv *env, j##type a_##type,jfieldID field){\
+    j##javaDownType value = (*env)->Get##staticStr##javaUpType##Field(env,a_##type,field);\
+    if(luaJniCatchJavaException(L, env)) return 0;\
+    lua_push##luaType(L,value);\
+    return 1;\
 }
 
-
-HashMap *createHashMap() {
-    HashMap *map = (HashMap *) malloc(sizeof(HashMap));
-    memset(map, 0, sizeof(HashMap));
-    return map;
+#define LUA_JNI_PUSH_WRAPPER(returnName,javaName,luaName,type,staticStr) \
+int luaJniPush##staticStr##Wrapper##returnName##Field(lua_State*L, JNIEnv *env, j##type a_##type,jfieldID field){\
+    jobject value = (*env)->Get##staticStr##ObjectField(env,a_##type,field);\
+    if(luaJniCatchJavaException(L, env)) return 0;\
+    if(value != NULL){\
+        j##javaName result = (*env)->Call##returnName##Method(env,value,context->javaName##Value);\
+        if(luaJniCatchJavaException(L, env)){\
+            (*env)->DeleteLocalRef(env,value);\
+            return 0;\
+        }\
+        lua_push##luaName(L,result);\
+        (*env)->DeleteLocalRef(env,value);\
+    }else{\
+        lua_pushnil(L);\
+    }\
+    return 1;\
 }
+#define LUA_JNI_PUSH_WRAPPER_X(javaUpType,javaDownType,luaType) \
+LUA_JNI_PUSH_WRAPPER(javaUpType,javaDownType,luaType,object,);\
+LUA_JNI_PUSH_WRAPPER(javaUpType,javaDownType,luaType,class,Static);
+
+#define LUA_JNI_PUSH_BASE_FIELD_X(javaUpType,javaDownType,luaType) \
+LUA_JNI_PUSH_BASE_FIELD(javaUpType,javaDownType,luaType,object,);  \
+LUA_JNI_PUSH_BASE_FIELD(javaUpType,javaDownType,luaType,class,Static);
+
+#define LUA_JNI_PUSH_BASE_FIELD_EX(javaUpType,javaDownType,luaType) \
+LUA_JNI_PUSH_BASE_FIELD_X(javaUpType,javaDownType,luaType);   \
+LUA_JNI_PUSH_WRAPPER_X(javaUpType,javaDownType,luaType);
+
+
+LUA_JNI_PUSH_BASE_FIELD_EX(Int,int,integer)
+LUA_JNI_PUSH_BASE_FIELD_EX(Long,long,integer)
+LUA_JNI_PUSH_BASE_FIELD_EX(Short,short,integer)
+LUA_JNI_PUSH_BASE_FIELD_EX(Byte,byte,integer)
+LUA_JNI_PUSH_BASE_FIELD_EX(Boolean,boolean,boolean)
+LUA_JNI_PUSH_BASE_FIELD_EX(Float,float,number)
+LUA_JNI_PUSH_BASE_FIELD_EX(Double,double,number)
+LUA_JNI_PUSH_BASE_FIELD_EX(Char,char,integer)
+
+#undef LUA_JNI_PUSH_BASE_FIELD_EX
+#undef LUA_JNI_PUSH_BASE_FIELD_X
+#undef LUA_JNI_PUSH_WRAPPER_X
+#undef LUA_JNI_PUSH_WRAPPER
+#undef LUA_JNI_PUSH_BASE_FIELD
+
+#define LUA_JNI_PUSH_STRING_FIELD(type,staticStr)\
+int luaJniPush##staticStr##StringField(lua_State*L, JNIEnv *env, j##type a_##type,jfieldID field){\
+    jstring value = (*env)->Get##staticStr##ObjectField(env,a_##type,field);\
+    if(luaJniCatchJavaException(L, env)) return 0;\
+    if(value != NULL){\
+        const char *str = (*env)->GetStringUTFChars(env,value,0);\
+        lua_pushstring(L,str);\
+        (*env)->ReleaseStringUTFChars(env,value,str);\
+        (*env)->DeleteLocalRef(env,value);\
+    }else{\
+        lua_pushnil(L);\
+    }\
+    return 1;\
+}
+
+LUA_JNI_PUSH_STRING_FIELD(object,)
+LUA_JNI_PUSH_STRING_FIELD(class,Static)
+#undef LUA_JNI_PUSH_STRING_FIELD
+
+#define LUA_JNI_PUSH_OBJECT_FIELD(type,staticStr)\
+int luaJniPush##staticStr##ObjectField(lua_State*L,JNIEnv*env,j##type a_##type,jfieldID field,const char*className){\
+    jobject value = (*env)->Get##staticStr##ObjectField(env,a_##type,field);\
+    if(luaJniCatchJavaException(L, env)) return 0;\
+    if(value != NULL){\
+        int64_t id = luaJniCacheObject(env, value);\
+        (*env)->DeleteLocalRef(env,value);\
+        JavaObject *object = (JavaObject *) lua_newuserdata(L,sizeof(JavaObject));\
+        object->id = id;\
+        int r = luaL_getmetatable(L,className);\
+        if(r){\
+            lua_setmetatable(L,-2);\
+        }else{\
+            lua_pushfstring(L,"can not find metatable for %s",className);\
+            return 0;\
+        }\
+    }else{\
+        lua_pushnil(L);\
+    }\
+    return 1;\
+}
+
+LUA_JNI_PUSH_OBJECT_FIELD(object,)
+LUA_JNI_PUSH_OBJECT_FIELD(class,Static)
+#undef LUA_JNI_PUSH_OBJECT_FIELD
+
+
+#define LUA_JNI_PUSH_ARRAY_FIELD(type,staticStr)\
+int luaJniPush##staticStr##ArrayField(lua_State*L,JNIEnv*env,j##type a_##type,jfieldID field,const char*className,int level,\
+                   enum ARRAY_ELEMENT_TYPE elementType){\
+    jobjectArray value = (*env)->Get##staticStr##ObjectField(env,a_##type,field);\
+    if(luaJniCatchJavaException(L, env)) return 0;\
+    if(value != NULL){\
+        JavaArray *array = (JavaArray *) lua_newuserdata(L,sizeof(JavaArray));\
+        array->id = (int64_t)value;\
+        array->level = level;\
+        array->name = className;\
+        array->elementType = elementType;\
+        luaL_getmetatable(L,JAVA_ARRAY_META_NAME);\
+        lua_setmetatable(L,-2);\
+    }else{\
+        lua_pushnil(L);\
+    }\
+    return 1;\
+}
+LUA_JNI_PUSH_ARRAY_FIELD(object,)
+LUA_JNI_PUSH_ARRAY_FIELD(class,Static)
+#undef LUA_JNI_PUSH_ARRAY_FIELD
+
+
 
 unsigned int hashMapHash(const char *key) {
     unsigned int hash = 0;
@@ -627,16 +669,10 @@ void hashMapClear(HashMap *map) {
     }
 }
 
-void hashMapDestroy(HashMap *map) {
-    hashMapClear(map);
-    free(map);
-}
+
 
 HashMap *ensureHashMap() {
-    if (g_map == NULL) {
-        g_map = createHashMap();
-    }
-    return g_map;
+    return &context->map;
 }
 
 
@@ -655,4 +691,122 @@ void* luaJniUnregister(const char *name) {
 JNIEnv* luaJniGetEnv(lua_State *L) {
     JNIEnv **envPtr = (JNIEnv **) lua_getextraspace(L);
     return *envPtr;
+}
+
+
+
+int luaJniInitContext(JNIEnv *env) {
+    Context *ctx = (Context*) malloc(sizeof(Context));
+    memset(ctx, 0, sizeof(Context));
+    for (int i = 0; i < TABLE_SIZE; ++i) {
+        ctx->map.table[i] = NULL;
+    }
+    jclass clazz = (*env)->FindClass(env,"java/lang/Boolean");
+    ctx->booleanClass = (*env)->NewWeakGlobalRef(env,clazz);
+
+    ctx->newBoolean = (*env)->GetMethodID(env,clazz,"<init>", "(Z)V");
+    ctx->booleanValue = (*env)->GetMethodID(env,clazz,"booleanValue", "()Z");
+    (*env)->DeleteLocalRef(env,clazz);
+    clazz = (*env)->FindClass(env,"java/lang/Byte");
+    ctx->byteClass = (*env)->NewWeakGlobalRef(env,clazz);
+    ctx->newByte = (*env)->GetMethodID(env,clazz,"<init>", "(B)V");
+    ctx->byteValue = (*env)->GetMethodID(env,clazz,"byteValue", "()B");
+    (*env)->DeleteLocalRef(env,clazz);
+    clazz = (*env)->FindClass(env,"java/lang/Character");
+    ctx->charClass = (*env)->NewWeakGlobalRef(env,clazz);
+    ctx->newChar = (*env)->GetMethodID(env,clazz,"<init>", "(C)V");
+    ctx->charValue = (*env)->GetMethodID(env,clazz,"charValue", "()C");
+    (*env)->DeleteLocalRef(env,clazz);
+    clazz = (*env)->FindClass(env,"java/lang/Short");
+    ctx->shortClass = (*env)->NewWeakGlobalRef(env,clazz);
+    ctx->newShort = (*env)->GetMethodID(env,clazz,"<init>", "(S)V");
+    ctx->shortValue = (*env)->GetMethodID(env,clazz,"shortValue", "()S");
+    (*env)->DeleteLocalRef(env,clazz);
+    clazz = (*env)->FindClass(env,"java/lang/Integer");
+    ctx->intClass = (*env)->NewWeakGlobalRef(env,clazz);
+    ctx->newInt = (*env)->GetMethodID(env,clazz,"<init>", "(I)V");
+    ctx->intValue = (*env)->GetMethodID(env,clazz,"intValue", "()I");
+    (*env)->DeleteLocalRef(env,clazz);
+    clazz = (*env)->FindClass(env,"java/lang/Long");
+    ctx->longClass = (*env)->NewWeakGlobalRef(env,clazz);
+    ctx->newLong = (*env)->GetMethodID(env,clazz,"<init>", "(J)V");
+    ctx->longValue = (*env)->GetMethodID(env,clazz,"longValue", "()J");
+    (*env)->DeleteLocalRef(env,clazz);
+    clazz = (*env)->FindClass(env,"java/lang/Float");
+    ctx->floatClass = (*env)->NewWeakGlobalRef(env,clazz);
+    ctx->newFloat = (*env)->GetMethodID(env,clazz,"<init>", "(F)V");
+    ctx->floatValue = (*env)->GetMethodID(env,clazz,"floatValue", "()F");
+    (*env)->DeleteLocalRef(env,clazz);
+    clazz = (*env)->FindClass(env,"java/lang/Double");
+    ctx->doubleClass =(*env)->NewWeakGlobalRef(env,clazz);
+    ctx->newDouble = (*env)->GetMethodID(env,clazz,"<init>", "(D)V");
+    ctx->doubleValue = (*env)->GetMethodID(env,clazz,"doubleValue", "()D");
+    (*env)->DeleteLocalRef(env,clazz);
+    context = ctx;
+    return 1;
+}
+
+int luaJniReleaseContext(JNIEnv *env) {
+    if (context) {
+        hashMapClear(&context->map);
+        (*env)->DeleteWeakGlobalRef(env,context->booleanClass);
+        (*env)->DeleteWeakGlobalRef(env,context->byteClass);
+        (*env)->DeleteWeakGlobalRef(env,context->charClass);
+        (*env)->DeleteWeakGlobalRef(env,context->shortClass);
+        (*env)->DeleteWeakGlobalRef(env,context->intClass);
+        (*env)->DeleteWeakGlobalRef(env,context->longClass);
+        (*env)->DeleteWeakGlobalRef(env,context->floatClass);
+        (*env)->DeleteWeakGlobalRef(env,context->doubleClass);
+        free(context);
+        context = NULL;
+    }
+    return 1;
+}
+
+#define LUA_JNI_NEW_WRAPPER(up,down) \
+jobject luaJniNew##up(JNIEnv*env, j##down value){\
+    return (*env)->NewObject(env,context->down##Class, context->new##up,value);\
+}
+
+LUA_JNI_NEW_WRAPPER(Boolean,boolean)
+LUA_JNI_NEW_WRAPPER(Byte,byte)
+LUA_JNI_NEW_WRAPPER(Char,char)
+LUA_JNI_NEW_WRAPPER(Short,short)
+LUA_JNI_NEW_WRAPPER(Int,int)
+LUA_JNI_NEW_WRAPPER(Long,long)
+LUA_JNI_NEW_WRAPPER(Float,float)
+LUA_JNI_NEW_WRAPPER(Double,double)
+#undef LUA_JNI_NEW_WRAPPER
+
+
+jboolean luaJniBooleanValue(JNIEnv*env, jobject obj){
+    return (*env)->CallBooleanMethod(env,obj,context->booleanValue);
+}
+
+jbyte luaJniByteValue(JNIEnv*env, jobject obj){
+    return (*env)->CallByteMethod(env,obj,context->byteValue);
+}
+
+jchar luaJniCharValue(JNIEnv*env, jobject obj){
+    return (*env)->CallCharMethod(env,obj,context->charValue);
+}
+
+jshort luaJniShortValue(JNIEnv*env, jobject obj){
+    return (*env)->CallShortMethod(env,obj,context->shortValue);
+}
+
+jint luaJniIntValue(JNIEnv*env, jobject obj){
+    return (*env)->CallIntMethod(env,obj,context->intValue);
+}
+
+jlong luaJniLongValue(JNIEnv*env, jobject obj){
+    return (*env)->CallLongMethod(env,obj,context->longValue);
+}
+
+jfloat luaJniFloatValue(JNIEnv*env, jobject obj){
+    return (*env)->CallFloatMethod(env,obj,context->floatValue);
+}
+
+jdouble luaJniDoubleValue(JNIEnv*env, jobject obj){
+    return (*env)->CallDoubleMethod(env,obj,context->doubleValue);
 }

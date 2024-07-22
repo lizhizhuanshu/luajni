@@ -231,7 +231,8 @@ class ClassCodeGenerator(private val clazz:ClassMetaData):Generator,
     return """
       |static int ${constructorFunctionName()}(lua_State*L){
       |  JNIEnv* env = luaJniGetEnv(L);
-      |  jclass clazz = (*env)->FindClass(env,"${className().replace(".","/")}");
+      |  ClassInfo* classInfo = (ClassInfo*)lua_touserdata(L,lua_upvalueindex(1));
+      |  jclass clazz = (jclass)luaJniTakeObject(env,classInfo->id);
       |${java2luaException(context).mIndent(2)}
       |  jobject obj = NULL;
       |${eachConstructorMethod(context).mIndent(2)}
@@ -264,12 +265,15 @@ class ClassCodeGenerator(private val clazz:ClassMetaData):Generator,
       val parameters = constructor.parameters.withIndex().joinToString("&&"){(index,parameter)->
         isParameterTypeCode(parameter.type,index+1,context)
       }
-      "lua_gettop(L) == ${constructor.parameters.size+1} &&\n$parameters"
+      "lua_gettop(L) == ${constructor.parameters.size} &&\n$parameters"
     }
   }
   private fun isParameterTypeCode(type:CommonType,index:Int,context: GeneratorContext):String{
     if(type.dimensions >0){
       return "(lua_isnil(L,$index) || equalsJavaArray(lua_testudata(L,$index,\"JavaArray\"),${type.dimensions},\"${type.name}\",${generateArrayElementTypeCode(type.name)}))"
+    }
+    val wrapperCode = {name:String->
+      "(lua_isnil(L,$index) || lua_is${name}(L,$index))"
     }
     return when(type.name){
       "boolean" ->  "lua_isboolean(L,$index)"
@@ -280,6 +284,14 @@ class ClassCodeGenerator(private val clazz:ClassMetaData):Generator,
       "float" ->  "lua_isnumber(L,$index)"
       "double" ->  "lua_isnumber(L,$index)"
       "java.lang.String" ->  "(lua_isnil(L,$index) || lua_isstring(L,$index))"
+      "java.lang.Boolean"-> wrapperCode("boolean")
+      "java.lang.Byte"-> wrapperCode("integer")
+      "java.lang.Short"-> wrapperCode("integer")
+      "java.lang.Integer"-> wrapperCode("integer")
+      "java.lang.Long"-> wrapperCode("integer")
+      "java.lang.Float"-> wrapperCode("number")
+      "java.lang.Double"-> wrapperCode("number")
+      "java.lang.Character" -> wrapperCode("integer")
       else -> "(lua_isnil(L,$index) || lua_testudata(L,$index,\"${type.name}\") != NULL)"
     }
   }
@@ -287,7 +299,7 @@ class ClassCodeGenerator(private val clazz:ClassMetaData):Generator,
     return """
       |if(${constructorMethodEqualsCode(constructor,context)}){
       |${GenerateUtil.parametersInitCode(constructor,context,1,true).mIndent(2)}
-      |  jmethodID methodID = (env*)->GetMethodID(env,clazz,"<init>","${jniMethodType(constructor)}");
+      |  jmethodID methodID = (*env)->GetMethodID(env,clazz,"<init>","${jniMethodType(constructor)}");
       |${java2luaException(context).mIndent(2)}
       |  obj = (*env)->NewObject(env,clazz,methodID${generateParametersName(constructor.parameters)});
       |${java2luaException(context).mIndent(2)}
@@ -367,8 +379,9 @@ class ClassCodeGenerator(private val clazz:ClassMetaData):Generator,
     """.trimMargin()
     else if(clazz.constructors().isNotEmpty())
       """
-      |lua_pushcfunction(L,${constructorFunctionName()});
-      |lua_setglobal(L,${clazz.shortName()});
+      |lua_pushlightuserdata(L,classInfo);
+      |lua_pushcclosure(L,${constructorFunctionName()},1);
+      |lua_setglobal(L,"${clazz.shortName()}");
       """.trimMargin()
     else ""
   }

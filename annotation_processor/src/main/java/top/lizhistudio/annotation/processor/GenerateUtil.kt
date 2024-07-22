@@ -12,20 +12,35 @@ import javax.lang.model.element.ElementKind
 import javax.lang.model.element.ExecutableElement
 import javax.lang.model.element.Modifier
 import javax.lang.model.element.TypeElement
+import javax.lang.model.element.VariableElement
 
 object GenerateUtil {
 
-  private fun generateCommonGetField(cFieldName:String, fieldType:String):String{
+  private fun generateCommonGetField(cFieldName:String, fieldType:String,isStatic:Boolean=false):String{
+    val wrapperCode = {name:String->
+      "luaJniPush${if(isStatic)"Static" else ""}Wrapper${name}Field(L,env,${if(isStatic)"clazz" else "obj"},classInfo->$cFieldName)"
+    }
+    val commonCode = {name:String->
+      "luaJniPush${if(isStatic)"Static" else ""}${name}Field(L,env,${if(isStatic)"clazz" else "obj"},classInfo->$cFieldName)"
+    }
     return when(fieldType){
-      "short" -> "luaJniPushShortField(L,env,obj,classInfo->$cFieldName)"
-      "byte" -> "luaJniPushByteField(L,env,obj,classInfo->$cFieldName)"
-      "int" -> "luaJniPushIntField(L,env,obj,classInfo->$cFieldName)"
-      "long" -> "luaJniPushLongField(L,env,obj,classInfo->$cFieldName)"
-      "float" -> "luaJniPushFloatField(L,env,obj,classInfo->$cFieldName)"
-      "double" -> "luaJniPushDoubleField(L,env,obj,classInfo->$cFieldName)"
-      "boolean" -> "luaJniPushBooleanField(L,env,obj,classInfo->$cFieldName)"
-      "java.lang.String" -> "luaJniPushStringField(L,env,obj,classInfo->$cFieldName)"
-      else -> "luaJniPushObjectField(L,env,obj,classInfo->$cFieldName,\"$fieldType\")"
+      "short" -> commonCode("Short")
+      "byte" -> commonCode("Byte")
+      "int" -> commonCode("Int")
+      "long" -> commonCode("Long")
+      "float" -> commonCode("Float")
+      "double" -> commonCode("Double")
+      "boolean" -> commonCode("Boolean")
+      "java.lang.String" -> commonCode("String")
+      "java.lang.Boolean" -> wrapperCode("Boolean")
+      "java.lang.Byte" -> wrapperCode("Byte")
+      "java.lang.Short" -> wrapperCode("Short")
+      "java.lang.Integer" -> wrapperCode("Int")
+      "java.lang.Long" -> wrapperCode("Long")
+      "java.lang.Float" -> wrapperCode("Float")
+      "java.lang.Double" -> wrapperCode("Double")
+      "java.lang.Character" -> wrapperCode("Char")
+      else -> "luaJniPush${if(isStatic) "Static" else ""}ObjectField(L,env,obj,classInfo->$cFieldName,\"$fieldType\")"
     }
   }
   fun generateArrayElementTypeCode(elementType:String):String{
@@ -41,16 +56,16 @@ object GenerateUtil {
       else -> "ARRAY_ELEMENT_TYPE::ELEMENT_OBJECT"
     }
   }
-  private fun generateGetField(cFieldName:String, fieldType:String, dimensions:Int):String{
+  private fun generateGetField(cFieldName:String, fieldType:String, dimensions:Int,isStatic: Boolean):String{
     if(dimensions == 0){
-      return generateCommonGetField(cFieldName, fieldType)
+      return generateCommonGetField(cFieldName, fieldType,isStatic)
     }
     val elementType = generateArrayElementTypeCode(fieldType)
-    return "luaJniPushArrayField(L,env,obj,classInfo->$cFieldName,\"$fieldType\",$dimensions,$elementType)"
+    return "luaJniPush${if(isStatic) "Static" else ""}ArrayField(L,env,obj,classInfo->$cFieldName,\"$fieldType\",$dimensions,$elementType)"
   }
   fun generateGetField(field:CommonField,context: GeneratorContext):String{
     return """
-      |if(${generateGetField(toCFieldName(field),field.type.name,field.type.dimensions)} == 0){
+      |if(${generateGetField(toCFieldName(field),field.type.name,field.type.dimensions,field.static)} == 0){
       |${generateReleaseContextCode(context).mIndent(2)}
       |  lua_error(L);
       |}
@@ -115,6 +130,19 @@ object GenerateUtil {
           |}
       """.trimMargin()
     }
+    val wrapperCode = {javaType:String,luaType:String->
+      """
+        |jobject result = (*env)->Call${staticStr}ObjectMethod(env,$obj,classInfo->${toCMethodName(method)}${generateParametersName(method.parameters)});
+        |${java2luaException(context)}
+        |if(result == NULL){
+        |  lua_pushnil(L);
+        |}else{
+        |  j${javaType} luaResult = luaJni${javaType.capitalizeFirstLetter()}Value(env,result);
+        |  (*env)->DeleteLocalRef(env,result);
+        |  lua_push${luaType}(L,luaResult);
+        |}
+      """.trimMargin()
+    }
     return when(method.returnType.name){
       "void" -> """
           |(*env)->Call${staticStr}VoidMethod(env,$obj,classInfo->${toCMethodName(method)}${generateParametersName(method.parameters)});
@@ -168,6 +196,14 @@ object GenerateUtil {
           |  (*env)->DeleteLocalRef(env,result);
           |}
         """.trimMargin()
+      "java.lang.Boolean" -> wrapperCode("boolean","boolean")
+      "java.lang.Byte" -> wrapperCode("byte","integer")
+      "java.lang.Character"-> wrapperCode("char","integer")
+      "java.lang.Short" -> wrapperCode("short","integer")
+      "java.lang.Integer" -> wrapperCode("int","integer")
+      "java.lang.Long" -> wrapperCode("long","integer")
+      "java.lang.Float" -> wrapperCode("float","number")
+      "java.lang.Double" -> wrapperCode("double","number")
       else -> """
           |jobject result = (*env)->Call${staticStr}ObjectMethod(env,$obj,classInfo->${toCMethodName(method)}${generateParametersName(method.parameters)});
           |${java2luaException(context)}
@@ -215,7 +251,8 @@ object GenerateUtil {
   }
 
   fun getFieldIdCode(field:CommonField):String{
-    return "classInfo->${toCFieldName(field)} = (*env)->GetFieldID(env,clazz,\"${field.name}\",\"${jniParameterType(field.type)}\");"
+    val staticStr = if(field.static) "Static" else ""
+    return "classInfo->${toCFieldName(field)} = (*env)->Get${staticStr}FieldID(env,clazz,\"${field.name}\",\"${jniParameterType(field.type)}\");"
   }
 
   fun getMethodIdCode(method:CommonMethod):String{
@@ -282,8 +319,17 @@ object GenerateUtil {
           |if(!lua_is${name}(L,$index)){
           |${generateReleaseContextCode(context).mIndent(2)}
           |  luaL_error(L,"Parameter $index must be a $name");
-          |};
+          |}
         """.trimMargin()
+    }
+    val generateWrapperTypeCheck = {name:String->
+       """
+         |if(!lua_isnoneornil(L,$index)&&!lua_is${name}(L,$index)){
+         |${generateReleaseContextCode(context).mIndent(2)}
+         |  luaL_error(L,"Parameter $index must be a $name");
+         |}
+       """.trimMargin()
+
     }
 
     if(type.dimensions > 0){
@@ -308,6 +354,13 @@ object GenerateUtil {
       "long" -> generateSimpleTypeCheck("integer")
       "float" -> generateSimpleTypeCheck("number")
       "double" -> generateSimpleTypeCheck("number")
+      "java.lang.Boolean"-> generateWrapperTypeCheck("boolean")
+      "java.lang.Byte" -> generateWrapperTypeCheck("integer")
+      "java.lang.Short" -> generateWrapperTypeCheck("integer")
+      "java.lang.Integer" -> generateWrapperTypeCheck("integer")
+      "java.lang.Long" -> generateWrapperTypeCheck("integer")
+      "java.lang.Float" -> generateWrapperTypeCheck("number")
+      "java.lang.Double" -> generateWrapperTypeCheck("number")
       "java.lang.String" -> """
           |if(!lua_isnoneornil(L,$index)&&!lua_isstring(L,$index)){
           |${generateReleaseContextCode(context).mIndent(2)}
@@ -341,6 +394,21 @@ object GenerateUtil {
       val paramName = toCParameterName(parameterName)
       "$jniType $paramName = lua_to${name}(L,$index);"
     }
+    val wrapParamInit = { targetName:String, luaType:String->
+      val paramName = toCParameterName(parameterName)
+      context.addDeleteLocalRef(paramName)
+      """
+          |jobject $paramName = NULL;
+          |if(lua_is${luaType}(L,$index)){
+          |  j${targetName} luaParam_$paramName = lua_to${luaType}(L,$index);
+          |  $paramName = luaJniNew${targetName.capitalizeFirstLetter()}(env,luaParam_$paramName);
+          |  if(luaJniCatchJavaException(L,env)){
+          |${generateReleaseContextCode(context).mIndent(4)}
+          |    lua_error(L);
+          |  }
+          |}
+        """.trimMargin()
+    }
     return when(type.name){
       "boolean" -> simpleParamInit("boolean")
       "byte" -> simpleParamInit("integer")
@@ -364,6 +432,14 @@ object GenerateUtil {
             |}
           """.trimMargin()
       }
+      "java.lang.Boolean" -> wrapParamInit("boolean","boolean")
+      "java.lang.Byte" -> wrapParamInit("byte","integer")
+      "java.lang.Character" -> wrapParamInit("char","integer")
+      "java.lang.Short" -> wrapParamInit("short","integer")
+      "java.lang.Integer" -> wrapParamInit("int","integer")
+      "java.lang.Long" -> wrapParamInit("long","integer")
+      "java.lang.Float" -> wrapParamInit("float","number")
+      "java.lang.Double" -> wrapParamInit("double","number")
       else -> {
         val paramName = toCParameterName(parameterName)
         val jniType = GenerateUtil.toJniTypeName(type.name)
@@ -414,6 +490,21 @@ object GenerateUtil {
         lua_pushcclosure(L,${methodCallName(method.name)},1);
         lua_setglobal(L,"${method.name}");
       """.trimIndent()
+  }
+
+  fun isStaticField(field:VariableElement):Boolean{
+    val enclosingElement = field.enclosingElement
+
+    return when {
+      // 顶层变量
+      enclosingElement.kind == ElementKind.PACKAGE -> true
+      // companion object 中的变量
+      enclosingElement.kind == ElementKind.CLASS &&
+              isCompanionObject(enclosingElement as TypeElement) -> true
+      // Java static 变量
+      field.modifiers.contains(Modifier.STATIC) -> true
+      else -> false
+    }
   }
 
 
@@ -470,5 +561,13 @@ object GenerateUtil {
       enclosingElement = enclosingElement.enclosingElement
     }
     return qualifiedName
+  }
+
+  fun String.capitalizeFirstLetter(): String {
+    return if (this.isNotEmpty()) {
+      this.substring(0, 1).uppercase() + this.substring(1)
+    } else {
+      this
+    }
   }
 }
