@@ -5,5 +5,6 @@ package top.lizhistudio.annotation
 annotation class LuaField(
   val alias: String = "",
   val readonly: Boolean = false,
-  val method2field: Boolean = false
+  val method2field: Boolean = false,
+  val unpack:Array<String> = []
 )

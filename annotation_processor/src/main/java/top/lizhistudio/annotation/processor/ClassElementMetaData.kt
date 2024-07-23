@@ -3,6 +3,7 @@ package top.lizhistudio.annotation.processor
 
 import top.lizhistudio.annotation.LuaClass
 import top.lizhistudio.annotation.LuaField
+import top.lizhistudio.annotation.LuaFunction
 import top.lizhistudio.annotation.processor.GenerateUtil.capitalizeFirstLetter
 import top.lizhistudio.annotation.processor.GenerateUtil.getJvmName
 import top.lizhistudio.annotation.processor.GenerateUtil.isStaticField
@@ -27,13 +28,13 @@ class ClassElementMetaData(private val clazz:TypeElement): ClassMetaData {
     clazz.enclosedElements.filter {it.getAnnotation(LuaField::class.java)!=null}.forEach {
       when (it.kind) {
         ElementKind.METHOD -> {
-          methods.add(toCommonMethod(it as ExecutableElement))
+          methods.add(toCommonMethodWithLuaField(it as ExecutableElement))
         }
         ElementKind.FIELD -> {
           fields.add(toCommonField(it as VariableElement))
         }
         ElementKind.CONSTRUCTOR -> {
-          constructors.add(toCommonMethod(it as ExecutableElement))
+          constructors.add(toCommonMethodWithLuaField(it as ExecutableElement))
         }
         else -> {}
       }
@@ -94,14 +95,41 @@ class ClassElementMetaData(private val clazz:TypeElement): ClassMetaData {
       }
       return CommonType(t.toString(),count)
     }
-    fun toCommonMethod(element:ExecutableElement):CommonMethod{
+
+    fun toCommonMethodWithLuaField(element:ExecutableElement):CommonMethod{
       val annotation = element.getAnnotation(LuaField::class.java)
+        ?: throw IllegalArgumentException("element is not annotated with LuaField")
       val name = element.simpleName.toString()
-      val alias = if(annotation?.alias.isNullOrEmpty()) name else annotation!!.alias
+      val alias = annotation.alias.ifEmpty { name }
       val returnType = element.returnType
       val parameters = element.parameters.map { toCommonParameter(it) }
-      return CommonMethod(name, toCommonType(returnType),parameters,annotation?.method2field?:false,isStaticFunction(element),alias)
+      val unpack = if(annotation.unpack.isEmpty()) null else annotation.unpack
+      return CommonMethod(name,
+        toCommonType(returnType),
+        parameters,
+        annotation.method2field,
+        isStaticFunction(element),
+        alias,
+        unpack)
     }
+
+    fun toCommonMethodWithLuaFunction(element:ExecutableElement):CommonMethod{
+      val annotation = element.getAnnotation(LuaFunction::class.java)
+        ?: throw IllegalArgumentException("element is not annotated with LuaFunction")
+      val name = element.simpleName.toString()
+      val alias = annotation.alias.ifEmpty { name }
+      val unpack = if(annotation.unpack.isEmpty()) null else annotation.unpack
+      val returnType = element.returnType
+      val parameters = element.parameters.map { toCommonParameter(it) }
+      return CommonMethod(name,
+        toCommonType(returnType),
+        parameters,
+        false,
+        isStaticFunction(element),
+        alias,
+        unpack)
+    }
+
     fun toCommonParameter(element:VariableElement): CommonParameter {
       val name = element.simpleName.toString()
       val type = element.asType()

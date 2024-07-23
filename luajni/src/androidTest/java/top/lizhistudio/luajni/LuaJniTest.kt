@@ -154,6 +154,9 @@ class LuaJniTest {
     lua.execute("""
       local obj = InnerClass:test()
       assert(obj:add() == ${obj.test().add()})
+      local v1,v2 = InnerClass:unpack()
+      assert(v1 == ${obj.unpack().oneValue})
+      assert(v2 == ${obj.unpack().twoValue})
     """.trimIndent())
     lua.destroy()
   }

@@ -17,6 +17,7 @@ import top.lizhistudio.annotation.processor.GenerateUtil.toCConstructorName
 import top.lizhistudio.annotation.processor.GenerateUtil.toCFieldName
 import top.lizhistudio.annotation.processor.GenerateUtil.toCMethodName
 import top.lizhistudio.annotation.processor.GenerateUtil.toCParameterName
+import top.lizhistudio.annotation.processor.GenerateUtil.unpackReturnCode
 import top.lizhistudio.annotation.processor.data.CommonField
 import top.lizhistudio.annotation.processor.data.CommonMethod
 import top.lizhistudio.annotation.processor.data.CommonType
@@ -137,7 +138,7 @@ class ClassCodeGenerator(private val clazz:ClassMetaData):Generator,
       |${GenerateUtil.parametersInitCode(method,context,indexOrigin).mIndent(2)}
       |${GenerateUtil.callMethodCode(method,context).mIndent(2)}
       |${generateReleaseContextCode(context).mIndent(2)}
-      |  return 1;
+      |${unpackReturnCode(method.unpack).mIndent(2)}
       |}
     """.trimMargin()
   }

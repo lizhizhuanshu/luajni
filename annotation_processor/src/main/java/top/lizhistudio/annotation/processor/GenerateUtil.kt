@@ -577,4 +577,11 @@ object GenerateUtil {
       this
     }
   }
+
+  fun unpackReturnCode(unpack:Array<String>?):String{
+    return if(unpack.isNullOrEmpty()) "return 1;" else """
+      |${unpack.withIndex().joinToString("\n") {(index,key)-> "lua_getfield(L,${-1-index},\"${key}\");" }}
+      |return ${unpack.size};
+    """.trimMargin()
+  }
 }

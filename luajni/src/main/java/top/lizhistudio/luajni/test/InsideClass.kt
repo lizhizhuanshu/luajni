@@ -10,5 +10,10 @@ class InsideClass {
     fun test():SimpleTest {
       return SimpleTest()
     }
+
+    @LuaField(unpack = ["oneValue", "twoValue"])
+    fun unpack():SimpleTest {
+      return SimpleTest()
+    }
   }
 }

@@ -10,6 +10,7 @@ import top.lizhistudio.annotation.processor.GenerateUtil.methodCallName
 import top.lizhistudio.annotation.processor.GenerateUtil.setGlobalFunctionCode
 import top.lizhistudio.annotation.processor.GenerateUtil.toCMethodName
 import top.lizhistudio.annotation.processor.GenerateUtil.toJniTypeName
+import top.lizhistudio.annotation.processor.GenerateUtil.unpackReturnCode
 import top.lizhistudio.annotation.processor.data.CommonMethod
 import top.lizhistudio.annotation.processor.data.GeneratorContext
 import javax.lang.model.element.TypeElement
@@ -146,7 +147,7 @@ class FunctionsCodeGenerator(private val clazz:TypeElement):Generator,FunctionCo
         |${GenerateUtil.parametersInitCode(method,context,1,true).mIndent(2)}
         |${GenerateUtil.callMethodCode(method,context).mIndent(2)}
         |${generateReleaseContextCode(context).mIndent(2)}
-        |  return 1;
+        |${unpackReturnCode(method.unpack).mIndent(2)}
         |}
       """.trimMargin()
     }

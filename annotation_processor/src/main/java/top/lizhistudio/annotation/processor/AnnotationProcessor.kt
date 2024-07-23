@@ -5,7 +5,7 @@ import top.lizhistudio.annotation.LuaClass
 import top.lizhistudio.annotation.LuaEnum
 import top.lizhistudio.annotation.LuaEnvironment
 import top.lizhistudio.annotation.LuaFunction
-import top.lizhistudio.annotation.processor.ClassElementMetaData.Companion.toCommonMethod
+import top.lizhistudio.annotation.processor.ClassElementMetaData.Companion.toCommonMethodWithLuaFunction
 import top.lizhistudio.annotation.processor.GenerateUtil.isKotlinObject
 import top.lizhistudio.annotation.processor.GenerateUtil.isStaticFunction
 import top.lizhistudio.annotation.processor.GenerateUtil.mIndent
@@ -34,7 +34,7 @@ class AnnotationProcessor: AbstractProcessor() {
     val enclosing = element.enclosingElement as TypeElement
     val name = enclosing.qualifiedName.toString()
     val old = generators.firstOrNull {it.className() == name}
-    val method = toCommonMethod(element)
+    val method = toCommonMethodWithLuaFunction(element)
     if(old != null){
       (old as FunctionContainer).putFunction(method)
     }else{
